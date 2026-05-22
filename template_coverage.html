@@ -9,19 +9,19 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #1a1a2e;
-  color: #e0e0e0;
+  background: #021A18;
+  color: #DCE0E3;
   padding: 16px;
 }
 h1 {
   text-align: center;
   margin-bottom: 8px;
   font-size: 1.6em;
-  color: #fff;
+  color: #00BABC;
 }
 .subtitle {
   text-align: center;
-  color: #aaa;
+  color: #6A6E6E;
   margin-bottom: 16px;
   font-size: 0.9em;
 }
@@ -29,9 +29,9 @@ h1 {
   text-align: center;
   margin-bottom: 12px;
   font-size: 0.9em;
-  color: #ccc;
+  color: #DCE0E3;
 }
-.summary span { font-weight: 600; color: #fff; }
+.summary span { font-weight: 600; color: #F5F5F5; }
 .band-toggle {
   display: flex;
   gap: 8px;
@@ -40,16 +40,16 @@ h1 {
 }
 .band-btn {
   padding: 6px 14px;
-  border: 2px solid #555;
+  border: 2px solid #6A6E6E;
   border-radius: 4px;
   background: transparent;
-  color: #ccc;
+  color: #DCE0E3;
   cursor: pointer;
   font-weight: 600;
   font-size: 0.9em;
   transition: all 0.15s;
 }
-.band-btn.active { color: #fff; }
+.band-btn.active { color: #F5F5F5; }
 .band-btn.active[data-band="u"] { border-color: #3eb7ff; background: #3eb7ff33; }
 .band-btn.active[data-band="g"] { border-color: #30c39f; background: #30c39f33; }
 .band-btn.active[data-band="r"] { border-color: #ff7e00; background: #ff7e0033; }
@@ -58,7 +58,7 @@ h1 {
 .band-btn.active[data-band="y"] { border-color: #fdc900; background: #fdc90033; }
 .band-btn:hover { opacity: 0.8; }
 .plot-container {
-  background: #16213e;
+  background: #062E2C;
   border-radius: 8px;
   padding: 8px;
 }
@@ -155,17 +155,17 @@ function plot() {
   const layout = {
     xaxis: {
       title: 'RA (deg)', autorange: 'reversed',
-      color: '#aaa', gridcolor: '#333',
+      color: '#DCE0E3', gridcolor: '#0C4A47',
     },
     yaxis: {
       title: 'Dec (deg)',
-      color: '#aaa', gridcolor: '#333',
+      color: '#DCE0E3', gridcolor: '#0C4A47',
       scaleanchor: 'x', scaleratio: 1,
     },
-    paper_bgcolor: '#16213e',
-    plot_bgcolor: '#0f3460',
-    font: { color: '#e0e0e0' },
-    legend: { x: 1, y: 1, bgcolor: 'rgba(0,0,0,0.5)' },
+    paper_bgcolor: '#062E2C',
+    plot_bgcolor: '#021A18',
+    font: { color: '#DCE0E3' },
+    legend: { x: 1, y: 1, bgcolor: 'rgba(6,46,44,0.8)' },
     margin: { t: 20, b: 50, l: 60, r: 20 },
   };
 
