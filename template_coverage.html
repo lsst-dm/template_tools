@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Deployed Prompt Template Coverage</title>
+<title>Alert Production Template Coverage</title>
 <script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -50,12 +50,12 @@ h1 {
   transition: all 0.15s;
 }
 .band-btn.active { color: #fff; }
-.band-btn.active[data-band="u"] { border-color: #9b59b6; background: #9b59b633; }
-.band-btn.active[data-band="g"] { border-color: #2ecc71; background: #2ecc7133; }
-.band-btn.active[data-band="r"] { border-color: #e74c3c; background: #e74c3c33; }
-.band-btn.active[data-band="i"] { border-color: #f39c12; background: #f39c1233; }
-.band-btn.active[data-band="z"] { border-color: #3498db; background: #3498db33; }
-.band-btn.active[data-band="y"] { border-color: #1abc9c; background: #1abc9c33; }
+.band-btn.active[data-band="u"] { border-color: #3eb7ff; background: #3eb7ff33; }
+.band-btn.active[data-band="g"] { border-color: #30c39f; background: #30c39f33; }
+.band-btn.active[data-band="r"] { border-color: #ff7e00; background: #ff7e0033; }
+.band-btn.active[data-band="i"] { border-color: #2af5ff; background: #2af5ff33; }
+.band-btn.active[data-band="z"] { border-color: #a7f9c1; background: #a7f9c133; }
+.band-btn.active[data-band="y"] { border-color: #fdc900; background: #fdc90033; }
 .band-btn:hover { opacity: 0.8; }
 .plot-container {
   background: #16213e;
@@ -66,8 +66,8 @@ h1 {
 </head>
 <body>
 
-<h1>Deployed Prompt Template Coverage</h1>
-<p class="subtitle">Sky positions of patches with templates, by band</p>
+<h1>Alert Production Template Coverage</h1>
+<p class="subtitle">Sky positions of tracts with template coverage, by band</p>
 <div class="summary" id="summary"></div>
 <div class="band-toggle" id="band-toggle"></div>
 <div class="plot-container">
@@ -76,26 +76,27 @@ h1 {
 
 <script>
 const BAND_COLORS = {
-  u: '#9b59b6', g: '#2ecc71', r: '#e74c3c',
-  i: '#f39c12', z: '#3498db', y: '#1abc9c'
+  u: '#3eb7ff', g: '#30c39f', r: '#ff7e00',
+  i: '#2af5ff', z: '#a7f9c1', y: '#fdc900'
 };
 
 let DATA;
 let activeBands = new Set();
 
-fetch('embargo_template_data.json').then(r => r.json()).then(d => { DATA = d; init(); })
+fetch('deployed_template_data.json').then(r => r.json()).then(d => { DATA = d; init(); })
   .catch(() => {
     document.getElementById('summary').textContent =
-      'Could not load embargo_template_data.json. Place it alongside this HTML file.';
+      'Could not load deployed_template_data.json. Place it alongside this HTML file.';
   });
 
 function init() {
-  const bands = Object.keys(DATA.summary);
+  const bands = ['u', 'g', 'r', 'i', 'z', 'y'].filter(b => b in DATA.summary);
   bands.forEach(b => activeBands.add(b));
 
-  const summaryParts = bands.map(b =>
-    `<span style="color:${BAND_COLORS[b]}">${b}</span>: ${DATA.summary[b].n_patches} patches / ${DATA.summary[b].n_tracts} tracts`
-  );
+  const summaryParts = bands.map(b => {
+    const s = DATA.summary[b];
+    return `<span style="color:${BAND_COLORS[b]}">${b}</span>: ${s.n_patches} patches / ${s.n_tracts} tracts / ${s.area_sqdeg} deg²`;
+  });
   document.getElementById('summary').innerHTML = summaryParts.join(' &nbsp;|&nbsp; ');
 
   const toggle = document.getElementById('band-toggle');
@@ -121,14 +122,32 @@ function plot() {
   for (const band of activeBands) {
     const recs = DATA.records.filter(r => r.band === band);
     if (recs.length === 0) continue;
+    const ra = [];
+    const dec = [];
+    const text = [];
+    for (const r of recs) {
+      let ras = r.corners.map(pt => pt.ra);
+      const maxRa = Math.max(...ras);
+      const minRa = Math.min(...ras);
+      if (maxRa - minRa > 180) {
+        ras = ras.map(v => v < 180 ? v + 360 : v);
+      }
+      for (let i = 0; i < r.corners.length; i++) {
+        ra.push(ras[i]); dec.push(r.corners[i].dec); text.push(`Tract ${r.tract}`);
+      }
+      ra.push(ras[0]); dec.push(r.corners[0].dec); text.push(`Tract ${r.tract}`);
+      ra.push(null); dec.push(null); text.push('');
+    }
     traces.push({
-      x: recs.map(r => r.ra),
-      y: recs.map(r => r.dec),
-      mode: 'markers',
-      type: 'scattergl',
-      name: `${band} (${recs.length})`,
-      marker: { color: BAND_COLORS[band], size: 3, opacity: 0.7 },
-      text: recs.map(r => `Tract ${r.tract}, Patch ${r.patch}<br>RA: ${r.ra.toFixed(3)}, Dec: ${r.dec.toFixed(3)}`),
+      x: ra,
+      y: dec,
+      mode: 'lines',
+      type: 'scatter',
+      name: `${band} (${recs.length} tracts)`,
+      line: { color: BAND_COLORS[band], width: 1.5 },
+      fill: 'toself',
+      fillcolor: BAND_COLORS[band] + '33',
+      text: text,
       hoverinfo: 'text',
     });
   }
