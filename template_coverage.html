@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deployed Prompt Template Coverage</title>
+<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  padding: 16px;
+}
+h1 {
+  text-align: center;
+  margin-bottom: 8px;
+  font-size: 1.6em;
+  color: #fff;
+}
+.subtitle {
+  text-align: center;
+  color: #aaa;
+  margin-bottom: 16px;
+  font-size: 0.9em;
+}
+.summary {
+  text-align: center;
+  margin-bottom: 12px;
+  font-size: 0.9em;
+  color: #ccc;
+}
+.summary span { font-weight: 600; color: #fff; }
+.band-toggle {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.band-btn {
+  padding: 6px 14px;
+  border: 2px solid #555;
+  border-radius: 4px;
+  background: transparent;
+  color: #ccc;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9em;
+  transition: all 0.15s;
+}
+.band-btn.active { color: #fff; }
+.band-btn.active[data-band="u"] { border-color: #9b59b6; background: #9b59b633; }
+.band-btn.active[data-band="g"] { border-color: #2ecc71; background: #2ecc7133; }
+.band-btn.active[data-band="r"] { border-color: #e74c3c; background: #e74c3c33; }
+.band-btn.active[data-band="i"] { border-color: #f39c12; background: #f39c1233; }
+.band-btn.active[data-band="z"] { border-color: #3498db; background: #3498db33; }
+.band-btn.active[data-band="y"] { border-color: #1abc9c; background: #1abc9c33; }
+.band-btn:hover { opacity: 0.8; }
+.plot-container {
+  background: #16213e;
+  border-radius: 8px;
+  padding: 8px;
+}
+</style>
+</head>
+<body>
+
+<h1>Deployed Prompt Template Coverage</h1>
+<p class="subtitle">Sky positions of patches with templates, by band</p>
+<div class="summary" id="summary"></div>
+<div class="band-toggle" id="band-toggle"></div>
+<div class="plot-container">
+  <div id="sky-plot" style="width:100%; height:600px;"></div>
+</div>
+
+<script>
+const BAND_COLORS = {
+  u: '#9b59b6', g: '#2ecc71', r: '#e74c3c',
+  i: '#f39c12', z: '#3498db', y: '#1abc9c'
+};
+
+let DATA;
+let activeBands = new Set();
+
+fetch('embargo_template_data.json').then(r => r.json()).then(d => { DATA = d; init(); })
+  .catch(() => {
+    document.getElementById('summary').textContent =
+      'Could not load embargo_template_data.json. Place it alongside this HTML file.';
+  });
+
+function init() {
+  const bands = Object.keys(DATA.summary);
+  bands.forEach(b => activeBands.add(b));
+
+  const summaryParts = bands.map(b =>
+    `<span style="color:${BAND_COLORS[b]}">${b}</span>: ${DATA.summary[b].n_patches} patches / ${DATA.summary[b].n_tracts} tracts`
+  );
+  document.getElementById('summary').innerHTML = summaryParts.join(' &nbsp;|&nbsp; ');
+
+  const toggle = document.getElementById('band-toggle');
+  bands.forEach(b => {
+    const btn = document.createElement('button');
+    btn.className = 'band-btn active';
+    btn.dataset.band = b;
+    btn.textContent = b;
+    btn.addEventListener('click', () => {
+      btn.classList.toggle('active');
+      if (activeBands.has(b)) activeBands.delete(b);
+      else activeBands.add(b);
+      plot();
+    });
+    toggle.appendChild(btn);
+  });
+
+  plot();
+}
+
+function plot() {
+  const traces = [];
+  for (const band of activeBands) {
+    const recs = DATA.records.filter(r => r.band === band);
+    if (recs.length === 0) continue;
+    traces.push({
+      x: recs.map(r => r.ra),
+      y: recs.map(r => r.dec),
+      mode: 'markers',
+      type: 'scattergl',
+      name: `${band} (${recs.length})`,
+      marker: { color: BAND_COLORS[band], size: 3, opacity: 0.7 },
+      text: recs.map(r => `Tract ${r.tract}, Patch ${r.patch}<br>RA: ${r.ra.toFixed(3)}, Dec: ${r.dec.toFixed(3)}`),
+      hoverinfo: 'text',
+    });
+  }
+
+  const layout = {
+    xaxis: {
+      title: 'RA (deg)', autorange: 'reversed',
+      color: '#aaa', gridcolor: '#333',
+    },
+    yaxis: {
+      title: 'Dec (deg)',
+      color: '#aaa', gridcolor: '#333',
+      scaleanchor: 'x', scaleratio: 1,
+    },
+    paper_bgcolor: '#16213e',
+    plot_bgcolor: '#0f3460',
+    font: { color: '#e0e0e0' },
+    legend: { x: 1, y: 1, bgcolor: 'rgba(0,0,0,0.5)' },
+    margin: { t: 20, b: 50, l: 60, r: 20 },
+  };
+
+  Plotly.react('sky-plot', traces, layout, { responsive: true });
+}
+</script>
+</body>
+</html>
