@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no">
 <title>Alert Production Template Coverage</title>
-<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+<script type="text/javascript" src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -71,7 +71,7 @@ h1 {
 <div class="summary" id="summary"></div>
 <div class="band-toggle" id="band-toggle"></div>
 <div class="plot-container">
-  <div id="sky-plot" style="width:100%; height:600px;"></div>
+  <div id="aladin-lite-div" style="width:100%; height:700px;"></div>
 </div>
 
 <script>
@@ -81,13 +81,29 @@ const BAND_COLORS = {
 };
 
 let DATA;
+let aladin;
 let activeBands = new Set();
+let overlays = {};
 
-fetch('deployed_template_data.json').then(r => r.json()).then(d => { DATA = d; init(); })
-  .catch(() => {
-    document.getElementById('summary').textContent =
-      'Could not load deployed_template_data.json. Place it alongside this HTML file.';
+A.init.then(() => {
+  aladin = A.aladin('#aladin-lite-div', {
+    fov: 180,
+    projection: 'AIT',
+    cooFrame: 'equatorial',
+    showCooGridControl: true,
+    showSimbadPointerControl: false,
+    showCooGrid: true,
+    survey: 'P/DSS2/color',
   });
+
+  fetch('deployed_template_data.json')
+    .then(r => r.json())
+    .then(d => { DATA = d; init(); })
+    .catch(e => {
+      document.getElementById('summary').textContent =
+        'Could not load deployed_template_data.json. Place it alongside this HTML file. Error: ' + e;
+    });
+});
 
 function init() {
   const bands = ['u', 'g', 'r', 'i', 'z', 'y'].filter(b => b in DATA.summary);
@@ -109,67 +125,37 @@ function init() {
       btn.classList.toggle('active');
       if (activeBands.has(b)) activeBands.delete(b);
       else activeBands.add(b);
-      plot();
+      drawOverlays();
     });
     toggle.appendChild(btn);
   });
 
-  plot();
+  drawOverlays();
 }
 
-function plot() {
-  const traces = [];
+function drawOverlays() {
+  for (const band of Object.keys(overlays)) {
+    aladin.removeOverlay(overlays[band]);
+  }
+  overlays = {};
+
   for (const band of activeBands) {
     const recs = DATA.records.filter(r => r.band === band);
     if (recs.length === 0) continue;
-    const ra = [];
-    const dec = [];
-    const text = [];
-    for (const r of recs) {
-      let ras = r.corners.map(pt => pt.ra);
-      const maxRa = Math.max(...ras);
-      const minRa = Math.min(...ras);
-      if (maxRa - minRa > 180) {
-        ras = ras.map(v => v < 180 ? v + 360 : v);
-      }
-      for (let i = 0; i < r.corners.length; i++) {
-        ra.push(ras[i]); dec.push(r.corners[i].dec); text.push(`Tract ${r.tract}`);
-      }
-      ra.push(ras[0]); dec.push(r.corners[0].dec); text.push(`Tract ${r.tract}`);
-      ra.push(null); dec.push(null); text.push('');
-    }
-    traces.push({
-      x: ra,
-      y: dec,
-      mode: 'lines',
-      type: 'scatter',
-      name: `${band} (${recs.length} tracts)`,
-      line: { color: BAND_COLORS[band], width: 1.5 },
-      fill: 'toself',
-      fillcolor: BAND_COLORS[band] + '33',
-      text: text,
-      hoverinfo: 'text',
+
+    const overlay = A.graphicOverlay({
+      color: BAND_COLORS[band],
+      lineWidth: 2,
     });
+    aladin.addOverlay(overlay);
+
+    for (const r of recs) {
+      const coords = r.corners.map(pt => [pt.ra, pt.dec]);
+      overlay.add(A.polygon(coords));
+    }
+
+    overlays[band] = overlay;
   }
-
-  const layout = {
-    xaxis: {
-      title: 'RA (deg)', autorange: 'reversed',
-      color: '#DCE0E3', gridcolor: '#0C4A47',
-    },
-    yaxis: {
-      title: 'Dec (deg)',
-      color: '#DCE0E3', gridcolor: '#0C4A47',
-      scaleanchor: 'x', scaleratio: 1,
-    },
-    paper_bgcolor: '#062E2C',
-    plot_bgcolor: '#021A18',
-    font: { color: '#DCE0E3' },
-    legend: { x: 1, y: 1, bgcolor: 'rgba(6,46,44,0.8)' },
-    margin: { t: 20, b: 50, l: 60, r: 20 },
-  };
-
-  Plotly.react('sky-plot', traces, layout, { responsive: true });
 }
 </script>
 </body>
