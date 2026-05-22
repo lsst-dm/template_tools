@@ -57,10 +57,22 @@ h1 {
 .band-btn.active[data-band="z"] { border-color: #a7f9c1; background: #a7f9c133; }
 .band-btn.active[data-band="y"] { border-color: #fdc900; background: #fdc90033; }
 .band-btn:hover { opacity: 0.8; }
+.toggle-hint {
+  text-align: center;
+  color: #6A6E6E;
+  font-size: 0.75em;
+  margin-bottom: 12px;
+}
 .plot-container {
   background: #062E2C;
   border-radius: 8px;
   padding: 8px;
+}
+.generated-at {
+  text-align: right;
+  color: #6A6E6E;
+  font-size: 0.75em;
+  margin-top: 8px;
 }
 </style>
 </head>
@@ -70,9 +82,11 @@ h1 {
 <p class="subtitle">Sky positions of tracts with template coverage, by band</p>
 <div class="summary" id="summary"></div>
 <div class="band-toggle" id="band-toggle"></div>
+<p class="toggle-hint">Click to toggle bands</p>
 <div class="plot-container">
   <div id="aladin-lite-div" style="width:100%; height:700px;"></div>
 </div>
+<p class="generated-at" id="generated-at"></p>
 
 <script>
 const BAND_COLORS = {
@@ -114,6 +128,10 @@ function init() {
     return `<span style="color:${BAND_COLORS[b]}">${b}</span>: ${s.n_patches} patches / ${s.n_tracts} tracts / ${s.area_sqdeg} deg²`;
   });
   document.getElementById('summary').innerHTML = summaryParts.join(' &nbsp;|&nbsp; ');
+
+  if (DATA.generated_at) {
+    document.getElementById('generated-at').textContent = 'Data generated: ' + DATA.generated_at;
+  }
 
   const toggle = document.getElementById('band-toggle');
   bands.forEach(b => {

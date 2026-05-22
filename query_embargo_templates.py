@@ -7,6 +7,7 @@ coordinates for the embargo templates dashboard.
 import json
 import math
 from collections import defaultdict
+from datetime import datetime, timezone
 
 import lsst.daf.butler as dafButler
 from lsst.geom import SpherePoint
@@ -129,6 +130,7 @@ def main():
     summary = build_summary(skymap, patches_by_band, tracts_by_band)
 
     output = {
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "summary": summary,
         "records": records,
     }
