@@ -10,17 +10,23 @@ import json
 import math
 from collections import defaultdict
 from datetime import datetime, timezone
+from pathlib import Path
 
 import healpy as hp
 import hpgeom as hpg
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np
 from astropy.io import fits
 
-import lsst.daf.butler as dafButler
 from lsst.geom import SpherePoint
+
+import common
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+WEB_DIR = REPO_ROOT / "web"
+OUTPUT_DIR = REPO_ROOT / "output"
 
 STERADIANS_TO_SQDEG = (180.0 / math.pi) ** 2
 
@@ -50,10 +56,11 @@ def spherical_polygon_area(vertices):
 
 def query_template_patches(repo="embargo", collection="LSSTCam/templates"):
     """Query Butler for all template_coadd data IDs."""
+    import lsst.daf.butler as dafButler
     butler = dafButler.Butler(repo)
 
     patches_by_band = defaultdict(list)
-    for band in ['u', 'g', 'r', 'i', 'z', 'y']:
+    for band in common.BANDS:
         refs = butler.query_datasets(
             "template_coadd",
             collections=collection,
@@ -70,26 +77,15 @@ def query_template_patches(repo="embargo", collection="LSSTCam/templates"):
     return patches_by_band
 
 
-def get_skymap():
-    """Load the lsst_cells_v2 skymap from the embargo Butler."""
-    butler = dafButler.Butler("embargo")
-    return butler.get("skyMap", skymap="lsst_cells_v2", collections="skymaps")
-
-
 def get_tract_corners(skymap, tracts_by_band):
     """Compute RA, Dec corners for each tract that has any patch coverage."""
     records = []
     for band, tract_ids in tracts_by_band.items():
         for tract_id in sorted(tract_ids):
-            tract_info = skymap[tract_id]
-            vertices = tract_info.getInnerSkyPolygon().getVertices()
-            corners = []
-            for v in vertices:
-                point = SpherePoint(v)
-                corners.append({
-                    "ra": point.getRa().asDegrees(),
-                    "dec": point.getDec().asDegrees(),
-                })
+            corners = [
+                {"ra": ra, "dec": dec}
+                for ra, dec in common.tract_corners(skymap[tract_id], ndigits=None)
+            ]
             records.append({
                 "band": band,
                 "tract": tract_id,
@@ -277,7 +273,7 @@ def main():
         print(f"  {band}: {len(patches_by_band[band])} patches in {len(tracts)} tracts")
 
     print("Loading skymap...")
-    skymap = get_skymap()
+    skymap = common.load_skymap("embargo")
 
     print("Computing tract corners...")
     records = get_tract_corners(skymap, tracts_by_band)
@@ -290,7 +286,10 @@ def main():
         "records": records,
     }
 
-    outfile = "deployed_template_data.json"
+    WEB_DIR.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    outfile = WEB_DIR / "deployed_template_data.json"
     with open(outfile, "w") as f:
         json.dump(output, f)
 
@@ -302,10 +301,10 @@ def main():
     coverage_maps = build_healpix_coverage(patch_polygons, nside=args.nside)
 
     for band, cov_map in coverage_maps.items():
-        fits_fname = f"template_coverage_healpix_{band}_nside{args.nside}.fits"
-        png_fname = f"template_coverage_healpix_{band}_nside{args.nside}.png"
-        write_healpix_fits(cov_map, args.nside, band, fits_fname)
-        write_healpix_png(cov_map, args.nside, band, png_fname)
+        fits_fname = OUTPUT_DIR / f"template_coverage_healpix_{band}_nside{args.nside}.fits"
+        png_fname = OUTPUT_DIR / f"template_coverage_healpix_{band}_nside{args.nside}.png"
+        write_healpix_fits(cov_map, args.nside, band, str(fits_fname))
+        write_healpix_png(cov_map, args.nside, band, str(png_fname))
         n_covered = np.count_nonzero(cov_map)
         area = n_covered * hpg.nside_to_pixel_area(args.nside, degrees=True)
         print(f"  {band}: {fits_fname}, {png_fname} ({n_covered} pixels, ~{area:.1f} deg²)")
