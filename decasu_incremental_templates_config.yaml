@@ -1,0 +1,22 @@
+outbase: "incremental_template_inputs"
+use_lsst_consdb: true
+nside: 1024
+map_types:
+  nexp: ["sum"]
+  psf_fwhm: ["mean"]
+use_two_amps: false
+mask_lsstcam_bad_amps: false
+use_wcs: false
+arcsec_per_pix: 0.20
+zp_global: 27.0
+exp_field: "visit_id"
+ccd_field: "detector"
+band_field: "band"
+mjd_field: "mjd"
+magzp_field: "zero_point"
+fwhm_field: "psf_fwhm"
+bad_ccds: []
+latitude: -30.244633333333333
+longitude: -70.74941666666666
+elevation: 2647.0
+lsst_db_additional_selection: "v.day_obs>=20250424 and v.img_type='science' and v.science_program in ('BLOCK-365', 'BLOCK-407', 'BLOCK-408', 'BLOCK-416', 'BLOCK-417', 'BLOCK-419', 'BLOCK-421', 'BLOCK-T698', 'BLOCK-T703', 'BLOCK-T706') and cv.detector not in (0, 1, 19, 20, 27, 30, 65, 68, 120, 122, 123, 158, 161, 168, 169, 187, 188) and cvq.eff_time_zero_point_scale>0.8 and cvq.psf_sigma<(1.2/0.2/2.355/POWER(cos(radians(abs(-30.245 - v.s_dec))), 0.6)) and cvq.zero_point is not null"

@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no">
+<title>N-Exposure Coverage by Tract</title>
+<script type="text/javascript" src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #021A18;
+  color: #DCE0E3;
+  padding: 16px;
+}
+h1 {
+  text-align: center;
+  margin-bottom: 8px;
+  font-size: 1.6em;
+  color: #00BABC;
+}
+.subtitle {
+  text-align: center;
+  color: #6A6E6E;
+  margin-bottom: 16px;
+  font-size: 0.9em;
+}
+.controls {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.control-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.control-label {
+  font-size: 0.85em;
+  color: #6A6E6E;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.band-btn {
+  padding: 6px 14px;
+  border: 2px solid #6A6E6E;
+  border-radius: 4px;
+  background: transparent;
+  color: #DCE0E3;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9em;
+  transition: all 0.15s;
+}
+.band-btn.active { color: #F5F5F5; }
+.band-btn.active[data-band="u"] { border-color: #3eb7ff; background: #3eb7ff33; }
+.band-btn.active[data-band="g"] { border-color: #30c39f; background: #30c39f33; }
+.band-btn.active[data-band="r"] { border-color: #ff7e00; background: #ff7e0033; }
+.band-btn.active[data-band="i"] { border-color: #2af5ff; background: #2af5ff33; }
+.band-btn.active[data-band="z"] { border-color: #a7f9c1; background: #a7f9c133; }
+.band-btn.active[data-band="y"] { border-color: #fdc900; background: #fdc90033; }
+.band-btn:hover { opacity: 0.8; }
+.thresh-btn {
+  padding: 6px 12px;
+  border: 2px solid #6A6E6E;
+  border-radius: 4px;
+  background: transparent;
+  color: #DCE0E3;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9em;
+  transition: all 0.15s;
+}
+.thresh-btn.active {
+  border-color: #00BABC;
+  background: #00BABC33;
+  color: #F5F5F5;
+}
+.thresh-btn:hover { opacity: 0.8; }
+.summary {
+  text-align: center;
+  margin-bottom: 12px;
+  font-size: 0.85em;
+  color: #DCE0E3;
+}
+.summary span { font-weight: 600; color: #F5F5F5; }
+.plot-container {
+  background: #062E2C;
+  border-radius: 8px;
+  padding: 8px;
+  position: relative;
+}
+.legend {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(2, 26, 24, 0.85);
+  border-radius: 6px;
+  padding: 10px 14px;
+  z-index: 10;
+  font-size: 0.8em;
+}
+.legend-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #00BABC;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+.legend-swatch {
+  width: 20px;
+  height: 12px;
+  border-radius: 2px;
+}
+.legend-item.clickable {
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  opacity: 0.5;
+}
+.legend-item.clickable.active {
+  opacity: 1;
+  background: rgba(255,255,255,0.1);
+}
+.legend-item.clickable:hover {
+  opacity: 0.9;
+}
+.colorbar {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(2, 26, 24, 0.85);
+  border-radius: 6px;
+  padding: 8px 14px;
+  z-index: 10;
+  font-size: 0.75em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.colorbar-gradient {
+  width: 200px;
+  height: 12px;
+  border-radius: 2px;
+}
+.generated-at {
+  text-align: right;
+  color: #6A6E6E;
+  font-size: 0.75em;
+  margin-top: 8px;
+}
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: #6A6E6E;
+  font-size: 1.2em;
+}
+.tooltip {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  pointer-events: none;
+  display: none;
+  z-index: 100;
+  white-space: nowrap;
+}
+</style>
+</head>
+<body>
+
+<h1>N-Exposure Coverage by Tract</h1>
+<p class="subtitle">HEALPix nexp maps with tract polygon overlays, colored by coverage threshold</p>
+
+<div class="controls">
+  <div class="control-group">
+    <span class="control-label">Band:</span>
+    <div id="band-toggle"></div>
+  </div>
+  <div class="control-group">
+    <span class="control-label">N &ge;:</span>
+    <div id="thresh-toggle"></div>
+  </div>
+</div>
+<div class="summary" id="summary"></div>
+
+<div class="plot-container">
+  <div id="tooltip" class="tooltip"></div>
+  <div id="aladin-lite-div" style="width:100%; height:700px;"></div>
+  <div class="legend" id="legend">
+    <div class="legend-title">Min tract coverage</div>
+    <div class="legend-item clickable active" data-min="0.25"><div class="legend-swatch" style="background:#fc8d59;"></div> &ge; 25%</div>
+    <div class="legend-item clickable" data-min="0.50"><div class="legend-swatch" style="background:#fee08b;"></div> &ge; 50%</div>
+    <div class="legend-item clickable" data-min="0.75"><div class="legend-swatch" style="background:#91cf60;"></div> &ge; 75%</div>
+    <div class="legend-item clickable" data-min="1.00"><div class="legend-swatch" style="background:#1a9850;"></div> 100%</div>
+  </div>
+  <div class="colorbar" id="colorbar">
+    <span>1</span>
+    <canvas id="colorbar-canvas" width="200" height="12" class="colorbar-gradient"></canvas>
+    <span id="colorbar-max">10</span>
+    <span style="margin-left:4px; color:#6A6E6E;">nexp</span>
+  </div>
+</div>
+<p class="generated-at" id="generated-at"></p>
+
+<div class="loading" id="loading">Loading data...</div>
+
+<script>
+const BAND_COLORS = {
+  u: '#3eb7ff', g: '#30c39f', r: '#ff7e00',
+  i: '#2af5ff', z: '#a7f9c1', y: '#fdc900'
+};
+
+const TRACT_COLORS = [
+  { min: 0.25, max: 0.50, color: '#fc8d59', alpha: 0.7 },
+  { min: 0.50, max: 0.75, color: '#fee08b', alpha: 0.7 },
+  { min: 0.75, max: 1.00, color: '#91cf60', alpha: 0.7 },
+  { min: 1.00, max: 1.01, color: '#1a9850', alpha: 0.7 },
+];
+
+let DATA;
+let DEPLOYED;
+let aladin;
+let activeBand = 'i';
+let activeThreshold = '3';
+let pixelOverlay = null;
+let tractOverlay = null;
+let deployedOverlay = null;
+let tractFootprintData = new Map();
+let minCoverageFrac = 0.25;
+
+function nexpToColor(value) {
+  const t = Math.min(Math.max((value - 1) / (10 - 1), 0), 1.0);
+  let r, g, b;
+  if (t < 0.5) {
+    const s = t * 2;
+    r = Math.round(0 + s * 255);
+    g = Math.round(0 + s * 255);
+    b = Math.round(255);
+  } else {
+    const s = (t - 0.5) * 2;
+    r = Math.round(255);
+    g = Math.round(255 - s * 255);
+    b = Math.round(255 - s * 255);
+  }
+  return `rgba(${r},${g},${b},0.7)`;
+}
+
+function drawColorbar() {
+  const canvas = document.getElementById('colorbar-canvas');
+  const ctx = canvas.getContext('2d');
+  for (let x = 0; x < 200; x++) {
+    const t = x / 199;
+    let r, g, b;
+    if (t < 0.5) {
+      const s = t * 2;
+      r = Math.round(0 + s * 255);
+      g = Math.round(0 + s * 255);
+      b = 255;
+    } else {
+      const s = (t - 0.5) * 2;
+      r = 255;
+      g = Math.round(255 - s * 255);
+      b = Math.round(255 - s * 255);
+    }
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(x, 0, 1, 12);
+  }
+  document.getElementById('colorbar-max').textContent = '10';
+}
+
+function getTractColor(fraction) {
+  for (const bin of TRACT_COLORS) {
+    if (fraction >= bin.min && fraction < bin.max) return bin;
+  }
+  return TRACT_COLORS[TRACT_COLORS.length - 1];
+}
+
+
+function drawPixels() {
+  if (pixelOverlay) aladin.removeOverlay(pixelOverlay);
+  pixelOverlay = A.graphicOverlay({ name: 'nimage_map', color: 'white', lineWidth: 0 });
+  aladin.addOverlay(pixelOverlay);
+
+  const bandData = DATA.bands[activeBand];
+  if (!bandData) return;
+
+  drawColorbar();
+
+  const footprints = bandData.pixels.map(pix => {
+    const color = nexpToColor(pix.v);
+    return A.polygon(pix.c, { color: 'transparent', fill: true, fillColor: color, lineWidth: 0, hoverColor: 'transparent' });
+  });
+  pixelOverlay.addFootprints(footprints);
+}
+
+function drawTracts() {
+  if (tractOverlay) aladin.removeOverlay(tractOverlay);
+  tractOverlay = A.graphicOverlay({ name: 'tracts', color: 'white', lineWidth: 1 });
+  aladin.addOverlay(tractOverlay);
+
+  const bandData = DATA.bands[activeBand];
+  if (!bandData) return;
+
+  let nAbove = 0;
+  let nTotal = bandData.tracts.length;
+
+  const footprints = [];
+  tractFootprintData = new Map();
+  for (const tract of bandData.tracts) {
+    const frac = tract.f[activeThreshold];
+    if (frac === undefined || frac < minCoverageFrac) continue;
+
+    const bin = getTractColor(frac);
+    const poly = A.polygon(tract.corners, {
+      color: bin.color,
+      lineWidth: 2,
+      hoverColor: '#ffffff',
+    });
+    tractFootprintData.set(poly, tract);
+    footprints.push(poly);
+    nAbove++;
+  }
+  tractOverlay.addFootprints(footprints);
+
+  document.getElementById('summary').innerHTML =
+    `<span style="color:${BAND_COLORS[activeBand]}">${activeBand}</span> band: ` +
+    `<span>${nTotal}</span> tracts with data, ` +
+    `<span>${nAbove}</span> with any pixels &ge; ${activeThreshold}`;
+}
+
+function drawDeployed() {
+  if (deployedOverlay) aladin.removeOverlay(deployedOverlay);
+  deployedOverlay = A.graphicOverlay({ name: 'deployed_templates', color: 'white', lineWidth: 0 });
+  aladin.addOverlay(deployedOverlay);
+
+  if (!DEPLOYED) return;
+
+  const recs = DEPLOYED.records.filter(r => r.band === activeBand);
+  const footprints = recs.map(r => {
+    const coords = r.corners.map(pt => [pt.ra, pt.dec]);
+    return A.polygon(coords, { color: '#ffffff', fill: true, fillColor: '#ffffff', opacity: 0.6, lineWidth: 1 });
+  });
+  deployedOverlay.addFootprints(footprints);
+}
+
+function redraw() {
+  drawPixels();
+  drawDeployed();
+  drawTracts();
+}
+
+A.init.then(() => {
+  aladin = A.aladin('#aladin-lite-div', {
+    fov: 360,
+    target: '0 0',
+    projection: 'AIT',
+    cooFrame: 'equatorial',
+    showCooGridControl: true,
+    showSimbadPointerControl: false,
+    showCooGrid: true,
+    survey: 'P/DSS2/color',
+  });
+
+  const tooltip = document.getElementById('tooltip');
+  aladin.on('footprintHovered', (footprint, xy) => {
+    if (footprint && tractFootprintData.has(footprint)) {
+      const tract = tractFootprintData.get(footprint);
+      const frac = tract.f[activeThreshold];
+      tooltip.textContent = `Tract ${tract.id} — ${Math.round(frac * 100)}% ≥ ${activeThreshold}`;
+      tooltip.style.left = (xy.x + 12) + 'px';
+      tooltip.style.top = (xy.y - 20) + 'px';
+      tooltip.style.display = 'block';
+    } else {
+      tooltip.style.display = 'none';
+    }
+  });
+
+  Promise.all([
+    fetch('nexp_dashboard_data.json').then(r => r.json()),
+    fetch('deployed_template_data.json').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).catch(e => { console.warn('deployed_template_data.json not loaded:', e); return null; }),
+  ]).then(([nexpData, deployedData]) => {
+    DATA = nexpData;
+    DEPLOYED = deployedData;
+    document.getElementById('loading').style.display = 'none';
+    init();
+  }).catch(e => {
+    document.getElementById('loading').textContent =
+      'Could not load data: ' + e;
+  });
+});
+
+function init() {
+  const bands = Object.keys(DATA.bands);
+  const toggle = document.getElementById('band-toggle');
+  bands.forEach(b => {
+    const btn = document.createElement('button');
+    btn.className = 'band-btn' + (b === activeBand ? ' active' : '');
+    btn.dataset.band = b;
+    btn.textContent = b;
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.band-btn').forEach(el => el.classList.remove('active'));
+      btn.classList.add('active');
+      activeBand = b;
+      redraw();
+    });
+    toggle.appendChild(btn);
+  });
+
+  const threshToggle = document.getElementById('thresh-toggle');
+  DATA.thresholds.forEach(t => {
+    const btn = document.createElement('button');
+    btn.className = 'thresh-btn' + (String(t) === activeThreshold ? ' active' : '');
+    btn.textContent = t;
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.thresh-btn').forEach(el => el.classList.remove('active'));
+      btn.classList.add('active');
+      activeThreshold = String(t);
+      drawTracts();
+    });
+    threshToggle.appendChild(btn);
+  });
+
+  document.querySelectorAll('.legend-item.clickable').forEach(item => {
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.legend-item.clickable').forEach(el => el.classList.remove('active'));
+      item.classList.add('active');
+      minCoverageFrac = parseFloat(item.dataset.min);
+      drawTracts();
+    });
+  });
+
+  if (DATA.generated_at) {
+    document.getElementById('generated-at').textContent = 'Data generated: ' + DATA.generated_at;
+  }
+
+  redraw();
+}
+</script>
+</body>
+</html>
