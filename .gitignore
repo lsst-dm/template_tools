@@ -11,3 +11,7 @@ output_incremental_test/
 
 # Notebook checkpoints
 .ipynb_checkpoints/
+
+# Python bytecode
+__pycache__/
+*.pyc
