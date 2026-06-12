@@ -4,46 +4,16 @@
 import argparse
 from pathlib import Path
 
-import healpy as hp
 import healsparse
-import numpy as np
 import pandas as pd
 
-import lsst.daf.butler as dafButler
+import common
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+OUTPUT_DIR = REPO_ROOT / "output"
 
-BANDS = ["u", "g", "r", "i", "z", "y"]
+BANDS = common.BANDS
 THRESHOLDS = [1, 2, 3, 5, 10]
-
-
-def load_skymap(butler_repo="/repo/main", skymap_name="lsst_cells_v2"):
-    butler = dafButler.Butler(butler_repo)
-    return butler.get("skyMap", skymap=skymap_name, collections="skymaps")
-
-
-def assign_pixels_to_tracts(valid_pixels, nside, skymap):
-    """Return tract IDs for each valid HEALPix pixel."""
-    theta, phi = hp.pix2ang(nside, valid_pixels, nest=True)
-    ra = np.degrees(phi)
-    dec = 90.0 - np.degrees(theta)
-    tract_ids = skymap.findTractIdArray(ra, dec, degrees=True)
-    return tract_ids
-
-
-def compute_tract_fractions(tract_ids, values):
-    """For each tract, compute fraction of pixels >= each threshold."""
-    unique_tracts = np.unique(tract_ids)
-    records = []
-    for tract_id in unique_tracts:
-        mask = tract_ids == tract_id
-        tract_values = values[mask]
-        n_pixels = len(tract_values)
-        record = {"tract": int(tract_id), "n_pixels": n_pixels}
-        for thresh in THRESHOLDS:
-            frac = np.sum(tract_values >= thresh) / n_pixels
-            record[f"frac_ge_{thresh}"] = frac
-        records.append(record)
-    return records
 
 
 def process_band(band, input_dir, skymap):
@@ -53,8 +23,15 @@ def process_band(band, input_dir, skymap):
     values = hsp_map[valid_pixels]
     nside = hsp_map.nside_sparse
 
-    tract_ids = assign_pixels_to_tracts(valid_pixels, nside, skymap)
-    records = compute_tract_fractions(tract_ids, values)
+    tract_ids = common.assign_pixels_to_tracts(valid_pixels, nside, skymap)
+
+    records = []
+    for record in common.compute_tract_fractions(tract_ids, values, THRESHOLDS):
+        row = {"tract": record["tract"], "n_pixels": record["n_pixels"]}
+        for thresh in THRESHOLDS:
+            row[f"frac_ge_{thresh}"] = record["fractions"][thresh]
+        records.append(row)
+
     df = pd.DataFrame(records)
     df["band"] = band
     return df
@@ -71,7 +48,7 @@ def main():
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("tract_nexp_fractions.csv"),
+        default=OUTPUT_DIR / "tract_nexp_fractions.csv",
         help="Output CSV file",
     )
     parser.add_argument(
@@ -89,7 +66,7 @@ def main():
     args = parser.parse_args()
 
     print("Loading skymap...")
-    skymap = load_skymap(args.butler_repo)
+    skymap = common.load_skymap(args.butler_repo)
 
     all_dfs = []
     for band in args.bands:
@@ -101,6 +78,7 @@ def main():
     result = pd.concat(all_dfs, ignore_index=True)
     col_order = ["band", "tract", "n_pixels"] + [f"frac_ge_{t}" for t in THRESHOLDS]
     result = result[col_order].sort_values(["band", "tract"])
+    args.output.parent.mkdir(parents=True, exist_ok=True)
     result.to_csv(args.output, index=False, float_format="%.4f")
     print(f"Wrote {args.output} ({len(result)} rows)")
 
