@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np
 from astropy.io import fits
 
+import lsst.daf.butler as dafButler
 from lsst.geom import SpherePoint
 
 import common
@@ -56,7 +57,6 @@ def spherical_polygon_area(vertices):
 
 def query_template_patches(repo="embargo", collection="LSSTCam/templates"):
     """Query Butler for all template_coadd data IDs."""
-    import lsst.daf.butler as dafButler
     butler = dafButler.Butler(repo)
 
     patches_by_band = defaultdict(list)
