@@ -1,0 +1,17 @@
+# Generated artifacts
+output/
+web/*.json
+*.fits
+*.png
+*.csv
+log_*.txt
+
+# Decasu input maps (large, not produced by this repo)
+output_incremental_test/
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Python bytecode
+__pycache__/
+*.pyc
