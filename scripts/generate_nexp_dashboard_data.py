@@ -8,7 +8,6 @@ consumed by nexp_coverage.html.
 
 import argparse
 import json
-import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,16 +15,13 @@ import healpy as hp
 import healsparse
 import numpy as np
 
-import lsst.daf.butler as dafButler
-from lsst.geom import SpherePoint
+import common
 
-BANDS = ["u", "g", "r", "i", "z", "y"]
+REPO_ROOT = Path(__file__).resolve().parent.parent
+WEB_DIR = REPO_ROOT / "web"
+
+BANDS = common.BANDS
 THRESHOLDS = [1, 2, 3, 4, 5, 7, 10]
-
-
-def load_skymap(butler_repo="/repo/main", skymap_name="lsst_cells_v2"):
-    butler = dafButler.Butler(butler_repo)
-    return butler.get("skyMap", skymap=skymap_name, collections="skymaps")
 
 
 def get_healpix_cell_corners(nside, pixels):
@@ -73,38 +69,20 @@ def build_tract_data(input_dir, band, skymap):
     values = hsp_map[valid_pixels]
     nside = hsp_map.nside_sparse
 
-    theta, phi = hp.pix2ang(nside, valid_pixels, nest=True)
-    ra = np.degrees(phi)
-    dec = 90.0 - np.degrees(theta)
-    tract_ids = skymap.findTractIdArray(ra, dec, degrees=True)
+    tract_ids = common.assign_pixels_to_tracts(valid_pixels, nside, skymap)
 
-    unique_tracts = np.unique(tract_ids)
     tracts_data = []
-    for tract_id in unique_tracts:
-        mask = tract_ids == tract_id
-        tract_values = values[mask]
-        n_pixels = int(len(tract_values))
-
-        tract_info = skymap[int(tract_id)]
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", FutureWarning)
-            vertices = tract_info.getInnerSkyPolygon().getVertices()
-        corners = []
-        for v in vertices:
-            point = SpherePoint(v)
-            corners.append([
-                round(point.getRa().asDegrees(), 3),
-                round(point.getDec().asDegrees(), 3),
-            ])
-
-        fractions = {}
-        for thresh in THRESHOLDS:
-            fractions[str(thresh)] = round(float(np.sum(tract_values >= thresh) / n_pixels), 4)
-
+    for record in common.compute_tract_fractions(tract_ids, values, THRESHOLDS):
+        tract_id = record["tract"]
+        corners = common.tract_corners(skymap[tract_id], ndigits=3)
+        fractions = {
+            str(thresh): round(record["fractions"][thresh], 4)
+            for thresh in THRESHOLDS
+        }
         tracts_data.append({
-            "id": int(tract_id),
+            "id": tract_id,
             "corners": corners,
-            "n": n_pixels,
+            "n": record["n_pixels"],
             "f": fractions,
         })
 
@@ -118,7 +96,7 @@ def main():
         help="Directory containing the .hsp files",
     )
     parser.add_argument(
-        "--output", type=Path, default=Path("nexp_dashboard_data.json"),
+        "--output", type=Path, default=WEB_DIR / "nexp_dashboard_data.json",
         help="Output JSON file",
     )
     parser.add_argument(
@@ -136,7 +114,7 @@ def main():
     args = parser.parse_args()
 
     print("Loading skymap...")
-    skymap = load_skymap(args.butler_repo)
+    skymap = common.load_skymap(args.butler_repo)
 
     output = {
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
@@ -151,7 +129,7 @@ def main():
         pixels_data, max_val = build_nexp_layer(args.input_dir, band, args.display_nside)
         print(f"    {len(pixels_data)} display pixels, max nexp={max_val:.1f}")
 
-        print(f"  Computing tract coverage fractions...")
+        print("  Computing tract coverage fractions...")
         tracts_data = build_tract_data(args.input_dir, band, skymap)
         print(f"    {len(tracts_data)} tracts with data")
 
@@ -161,6 +139,7 @@ def main():
             "max_nexp": round(max_val, 1),
         }
 
+    args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w") as f:
         json.dump(output, f)
 
