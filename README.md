@@ -3,6 +3,8 @@
 Tools and dashboards for visualizing Rubin Observatory Alert Production
 template coverage on the sky. 
 
+Note that major portions of this repository are AI-coded.
+It contains hard-coded paths, and is not intended to be portable.
 
 There are two independent dashboards, each backed by a
 Python data generator and an [Aladin Lite](https://aladin.cds.unistra.fr/AladinLite/doc/)
@@ -15,7 +17,7 @@ to determine input exposure depth (nexp) and identify candidate tracts to build 
 
 ## Regenerate data
 
-Requires the LSST Science Pipelines environment and USDF Butler and consdb access.  Contains hard-coded paths, and is not intended to be portable.
+Requires the LSST Science Pipelines environment and USDF Butler and consdb access.  
 
 ### Deployed Template Coverage
 
