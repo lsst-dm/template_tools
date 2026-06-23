@@ -592,9 +592,10 @@ function drawTracts() {
     if (frac === undefined || frac < minCoverageFrac) continue;
 
     const bin = getTractColor(frac);
+    const isSelected = selectedTract && tract.id === selectedTract.id;
     const poly = A.polygon(tract.corners, {
-      color: bin.color,
-      lineWidth: 2,
+      color: isSelected ? '#ffffff' : bin.color,
+      lineWidth: isSelected ? 4 : 2,
       hoverColor: '#ffffff',
     });
     tractFootprintData.set(poly, tract);
@@ -656,6 +657,14 @@ A.init.then(() => {
     }
   });
 
+  aladin.on('footprintClicked', (footprint) => {
+    if (footprint && tractFootprintData.has(footprint)) {
+      selectedTract = tractFootprintData.get(footprint);
+      drawTracts();        // refresh highlight
+      drawAltitudePlot();  // refresh visibility panel
+    }
+  });
+
   Promise.all([
     fetch('nexp_dashboard_data.json').then(r => r.json()),
     fetch('deployed_template_data.json').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).catch(e => { console.warn('deployed_template_data.json not loaded:', e); return null; }),
@@ -664,10 +673,6 @@ A.init.then(() => {
     DEPLOYED = deployedData;
     document.getElementById('loading').style.display = 'none';
     init();
-    // TEMP: verify rendering with a fixed southern target. Remove in Task 4.
-    selectedTract = { id: 'TEST', corners: [[60.0, -30.0]] };
-    document.getElementById('alt-date').value = rubinToday();
-    drawAltitudePlot();
   }).catch(e => {
     document.getElementById('loading').textContent =
       'Could not load data: ' + e;
@@ -717,6 +722,11 @@ function init() {
   if (DATA.generated_at) {
     document.getElementById('generated-at').textContent = 'Data generated: ' + DATA.generated_at;
   }
+
+  const altDate = document.getElementById('alt-date');
+  altDate.value = rubinToday();
+  altDate.addEventListener('change', drawAltitudePlot);
+  drawAltitudePlot();  // show placeholder until a tract is clicked
 
   redraw();
 }
