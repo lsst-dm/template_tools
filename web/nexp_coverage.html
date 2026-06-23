@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no">
 <title>N-Exposure Coverage by Tract</title>
 <script type="text/javascript" src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js" charset="utf-8"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -176,6 +177,44 @@ h1 {
   z-index: 100;
   white-space: nowrap;
 }
+.alt-panel {
+  margin-top: 16px;
+}
+.alt-header {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.alt-header input[type="date"] {
+  background: #021A18;
+  color: #DCE0E3;
+  border: 2px solid #6A6E6E;
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 0.9em;
+}
+.alt-caption {
+  text-align: center;
+  font-size: 0.85em;
+  color: #DCE0E3;
+  margin-bottom: 8px;
+  min-height: 1.2em;
+}
+.alt-caption span { font-weight: 600; color: #F5F5F5; }
+#alt-canvas {
+  width: 100%;
+  height: 340px;
+  display: block;
+}
+.alt-placeholder {
+  text-align: center;
+  color: #6A6E6E;
+  padding: 60px 0;
+  font-size: 1.1em;
+}
 </style>
 </head>
 <body>
@@ -211,6 +250,17 @@ h1 {
     <span id="colorbar-max">10</span>
     <span style="margin-left:4px; color:#6A6E6E;">nexp</span>
   </div>
+</div>
+<div class="plot-container alt-panel">
+  <div class="alt-header">
+    <div class="control-group">
+      <span class="control-label">Night of:</span>
+      <input type="date" id="alt-date">
+    </div>
+  </div>
+  <div class="alt-caption" id="alt-caption"></div>
+  <div class="alt-placeholder" id="alt-placeholder">Click a tract above to see its visibility from Rubin.</div>
+  <canvas id="alt-canvas"></canvas>
 </div>
 <p class="generated-at" id="generated-at"></p>
 
