@@ -372,6 +372,143 @@ function twilightColor(sunAlt) {
   return '#021412';                    // night
 }
 
+function showAltPlaceholder(msg) {
+  const ph = document.getElementById('alt-placeholder');
+  const canvas = document.getElementById('alt-canvas');
+  ph.textContent = msg;
+  ph.style.display = 'block';
+  canvas.style.display = 'none';
+  document.getElementById('alt-caption').innerHTML = '';
+}
+
+function drawAltitudePlot() {
+  const canvas = document.getElementById('alt-canvas');
+  const placeholder = document.getElementById('alt-placeholder');
+  const caption = document.getElementById('alt-caption');
+
+  if (!selectedTract) {
+    showAltPlaceholder('Click a tract above to see its visibility from Rubin.');
+    return;
+  }
+  if (typeof Astronomy === 'undefined') {
+    showAltPlaceholder('Astronomy Engine failed to load; altitude plot unavailable.');
+    return;
+  }
+
+  placeholder.style.display = 'none';
+  canvas.style.display = 'block';
+
+  const dateStr = document.getElementById('alt-date').value || rubinToday();
+  const target = tractTarget(selectedTract);
+  const win = nightWindow(dateStr);
+  const samples = sampleNight(win, target);
+  const midDate = new Date((win.start.getTime() + win.end.getTime()) / 2);
+  const moonIllum = Astronomy.Illumination(Astronomy.Body.Moon, midDate).phase_fraction;
+
+  // High-DPI canvas sizing.
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth;
+  const cssH = canvas.clientHeight;
+  canvas.width = cssW * dpr;
+  canvas.height = cssH * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  const m = { top: 32, right: 56, bottom: 32, left: 44 };
+  const W = cssW - m.left - m.right;
+  const H = cssH - m.top - m.bottom;
+  const t0 = win.start.getTime();
+  const t1 = win.end.getTime();
+  const xOf = t => m.left + W * (t - t0) / (t1 - t0);
+  const yOf = alt => m.top + H * (1 - alt / 90);  // 0..90 deg
+
+  // Twilight bands: one vertical rect per sample interval, colored by sun alt.
+  for (let i = 0; i < samples.length - 1; i++) {
+    const x0 = xOf(samples[i].d.getTime());
+    const x1 = xOf(samples[i + 1].d.getTime());
+    ctx.fillStyle = twilightColor(samples[i].sunAlt);
+    ctx.fillRect(x0, m.top, x1 - x0 + 1, H);
+  }
+
+  // Plot frame.
+  ctx.strokeStyle = '#6A6E6E';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(m.left, m.top, W, H);
+
+  // Left axis: altitude grid + labels (0..90 every 30).
+  ctx.fillStyle = '#6A6E6E';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let alt = 0; alt <= 90; alt += 30) {
+    const y = yOf(alt);
+    ctx.strokeStyle = '#ffffff22';
+    ctx.beginPath(); ctx.moveTo(m.left, y); ctx.lineTo(m.left + W, y); ctx.stroke();
+    ctx.fillStyle = '#6A6E6E';
+    ctx.fillText(alt + '°', m.left - 6, y);
+  }
+
+  // Right axis: airmass ticks.
+  ctx.textAlign = 'left';
+  for (const X of [1.0, 1.2, 1.5, 2.0, 3.0]) {
+    const y = yOf(altFromAirmass(X));
+    ctx.fillStyle = '#6A6E6E';
+    ctx.fillText(X.toFixed(1), m.left + W + 6, y);
+  }
+
+  // Horizon line at 0 deg.
+  ctx.strokeStyle = '#888';
+  ctx.beginPath(); ctx.moveTo(m.left, yOf(0)); ctx.lineTo(m.left + W, yOf(0)); ctx.stroke();
+
+  // X ticks at whole UTC hours within the window (also whole Chile hours).
+  const tickStart = new Date(Math.ceil(t0 / 3.6e6) * 3.6e6);
+  ctx.strokeStyle = '#ffffff22';
+  for (let t = tickStart.getTime(); t <= t1; t += 3.6e6) {
+    const x = xOf(t);
+    ctx.beginPath(); ctx.moveTo(x, m.top); ctx.lineTo(x, m.top + H); ctx.stroke();
+    ctx.fillStyle = '#6A6E6E';
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'center';
+    ctx.fillText(fmtTime(new Date(t), RUBIN_TZ), x, m.top + H + 6);    // bottom: Chile
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(fmtTime(new Date(t), 'UTC'), x, m.top - 6);          // top: UTC
+  }
+
+  // Axis titles.
+  ctx.fillStyle = '#6A6E6E';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText('Chile local (CLT/CLST)', m.left + W / 2, cssH - 14);
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('UTC', m.left + W / 2, 14);
+
+  // Curve helper (clips below-horizon to the frame).
+  const drawCurve = (key, color, dash) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash(dash || []);
+    ctx.beginPath();
+    let started = false;
+    for (const s of samples) {
+      const alt = Math.max(0, Math.min(90, s[key]));
+      const x = xOf(s.d.getTime());
+      const y = yOf(alt);
+      if (!started) { ctx.moveTo(x, y); started = true; } else { ctx.lineTo(x, y); }
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  };
+  drawCurve('moonAlt', '#cfd3d6', [5, 4]);                  // Moon: dashed grey
+  drawCurve('tgt', BAND_COLORS[activeBand] || '#00BABC');   // target: band color
+
+  // Caption.
+  caption.innerHTML =
+    `Tract <span>${selectedTract.id}</span> &mdash; ` +
+    `RA <span>${target.ra.toFixed(3)}°</span>, Dec <span>${target.dec.toFixed(3)}°</span> &middot; ` +
+    `Moon <span>${Math.round(moonIllum * 100)}%</span> illuminated`;
+}
+
 function nexpToColor(value) {
   const t = Math.min(Math.max((value - 1) / (10 - 1), 0), 1.0);
   let r, g, b;
@@ -527,6 +664,10 @@ A.init.then(() => {
     DEPLOYED = deployedData;
     document.getElementById('loading').style.display = 'none';
     init();
+    // TEMP: verify rendering with a fixed southern target. Remove in Task 4.
+    selectedTract = { id: 'TEST', corners: [[60.0, -30.0]] };
+    document.getElementById('alt-date').value = rubinToday();
+    drawAltitudePlot();
   }).catch(e => {
     document.getElementById('loading').textContent =
       'Could not load data: ' + e;
