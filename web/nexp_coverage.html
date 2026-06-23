@@ -291,7 +291,13 @@ let tractFootprintData = new Map();
 let minCoverageFrac = 0.25;
 
 // --- Altitude panel: astronomy helpers ---
-const RUBIN = new Astronomy.Observer(-30.2446, -70.7494, 2663);
+// Built lazily so a failed Astronomy Engine load doesn't abort this
+// script at parse time (the drawAltitudePlot guard handles that case).
+let _rubin = null;
+function rubinObserver() {
+  if (!_rubin) _rubin = new Astronomy.Observer(-30.2446, -70.7494, 2663);
+  return _rubin;
+}
 const RUBIN_TZ = 'America/Santiago';
 let selectedTract = null;
 
@@ -312,20 +318,20 @@ function tractTarget(tract) {
 // (UTC-3/-4), so the next set is that evening's sunset.
 function nightWindow(dateStr) {
   const start = new Date(dateStr + 'T12:00:00Z');
-  const sunset = Astronomy.SearchRiseSet(Astronomy.Body.Sun, RUBIN, -1, start, 1);
-  const sunrise = Astronomy.SearchRiseSet(Astronomy.Body.Sun, RUBIN, +1, sunset.date, 1);
+  const sunset = Astronomy.SearchRiseSet(Astronomy.Body.Sun, rubinObserver(), -1, start, 1);
+  const sunrise = Astronomy.SearchRiseSet(Astronomy.Body.Sun, rubinObserver(), +1, sunset.date, 1);
   return { start: sunset.date, end: sunrise.date };
 }
 
 // Altitude (deg) of a fixed equatorial target. RA in deg -> sidereal hours.
 function targetAltitude(date, target) {
-  return Astronomy.Horizon(date, RUBIN, target.ra / 15, target.dec, 'normal').altitude;
+  return Astronomy.Horizon(date, rubinObserver(), target.ra / 15, target.dec, 'normal').altitude;
 }
 
 // Altitude (deg) of a solar-system body (Sun, Moon).
 function bodyAltitude(date, body) {
-  const eq = Astronomy.Equator(body, date, RUBIN, true, true);
-  return Astronomy.Horizon(date, RUBIN, eq.ra, eq.dec, 'normal').altitude;
+  const eq = Astronomy.Equator(body, date, rubinObserver(), true, true);
+  return Astronomy.Horizon(date, rubinObserver(), eq.ra, eq.dec, 'normal').altitude;
 }
 
 // Sample the night: target/sun/moon altitude at nSteps+1 evenly spaced instants.
@@ -664,6 +670,8 @@ A.init.then(() => {
       drawAltitudePlot();  // refresh visibility panel
     }
   });
+
+  window.addEventListener('resize', () => { if (selectedTract) drawAltitudePlot(); });
 
   Promise.all([
     fetch('nexp_dashboard_data.json').then(r => r.json()),
