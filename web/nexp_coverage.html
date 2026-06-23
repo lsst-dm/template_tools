@@ -364,12 +364,14 @@ function fmtTime(date, tz) {
 }
 
 // Background color for the twilight band at a given Sun altitude (deg).
+// Brighter, white-neutral greys that darken toward true night so the
+// observable window stays the darkest part of the panel.
 function twilightColor(sunAlt) {
-  if (sunAlt > 0) return '#0a3a38';    // day
-  if (sunAlt > -6) return '#08302e';   // civil
-  if (sunAlt > -12) return '#062624';  // nautical
-  if (sunAlt > -18) return '#041d1b';  // astronomical
-  return '#021412';                    // night
+  if (sunAlt > 0) return '#6b7173';    // day
+  if (sunAlt > -6) return '#565c5e';   // civil
+  if (sunAlt > -12) return '#424749';  // nautical
+  if (sunAlt > -18) return '#2d3234';  // astronomical
+  return '#191d1e';                    // night
 }
 
 function showAltPlaceholder(msg) {
@@ -415,7 +417,7 @@ function drawAltitudePlot() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cssW, cssH);
 
-  const m = { top: 32, right: 56, bottom: 32, left: 44 };
+  const m = { top: 36, right: 64, bottom: 38, left: 56 };
   const W = cssW - m.left - m.right;
   const H = cssH - m.top - m.bottom;
   const t0 = win.start.getTime();
@@ -436,16 +438,19 @@ function drawAltitudePlot() {
   ctx.lineWidth = 1;
   ctx.strokeRect(m.left, m.top, W, H);
 
+  const labelColor = '#c8ccce';
+  const titleColor = '#e2e5e6';
+
   // Left axis: altitude grid + labels (0..90 every 30).
-  ctx.fillStyle = '#6A6E6E';
-  ctx.font = '11px sans-serif';
+  ctx.fillStyle = labelColor;
+  ctx.font = '13px sans-serif';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
   for (let alt = 0; alt <= 90; alt += 30) {
     const y = yOf(alt);
     ctx.strokeStyle = '#ffffff22';
     ctx.beginPath(); ctx.moveTo(m.left, y); ctx.lineTo(m.left + W, y); ctx.stroke();
-    ctx.fillStyle = '#6A6E6E';
+    ctx.fillStyle = labelColor;
     ctx.fillText(alt + '°', m.left - 6, y);
   }
 
@@ -453,7 +458,7 @@ function drawAltitudePlot() {
   ctx.textAlign = 'left';
   for (const X of [1.0, 1.2, 1.5, 2.0, 3.0]) {
     const y = yOf(altFromAirmass(X));
-    ctx.fillStyle = '#6A6E6E';
+    ctx.fillStyle = labelColor;
     ctx.fillText(X.toFixed(1), m.left + W + 6, y);
   }
 
@@ -467,7 +472,7 @@ function drawAltitudePlot() {
   for (let t = tickStart.getTime(); t <= t1; t += 3.6e6) {
     const x = xOf(t);
     ctx.beginPath(); ctx.moveTo(x, m.top); ctx.lineTo(x, m.top + H); ctx.stroke();
-    ctx.fillStyle = '#6A6E6E';
+    ctx.fillStyle = labelColor;
     ctx.textBaseline = 'top';
     ctx.textAlign = 'center';
     ctx.fillText(fmtTime(new Date(t), RUBIN_TZ), x, m.top + H + 6);    // bottom: Chile
@@ -476,12 +481,27 @@ function drawAltitudePlot() {
   }
 
   // Axis titles.
-  ctx.fillStyle = '#6A6E6E';
+  ctx.fillStyle = titleColor;
+  ctx.font = 'bold 13px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.fillText('Chile local (CLT/CLST)', m.left + W / 2, cssH - 14);
+  ctx.fillText('Chile local (CLT/CLST)', m.left + W / 2, cssH - 15);
   ctx.textBaseline = 'bottom';
-  ctx.fillText('UTC', m.left + W / 2, 14);
+  ctx.fillText('UTC', m.left + W / 2, 15);
+
+  // Vertical Y-axis titles: altitude (left), airmass (right).
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.save();
+  ctx.translate(13, m.top + H / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('Altitude (°)', 0, 0);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(cssW - 13, m.top + H / 2);
+  ctx.rotate(Math.PI / 2);
+  ctx.fillText('Airmass', 0, 0);
+  ctx.restore();
 
   // Curve helper (clips below-horizon to the frame).
   const drawCurve = (key, color, dash) => {
