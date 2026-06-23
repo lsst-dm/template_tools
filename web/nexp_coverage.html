@@ -351,13 +351,7 @@ function sampleNight(win, target, nSteps = 160) {
   return out;
 }
 
-// Airmass (sec z) from altitude in degrees; Infinity at/below horizon.
-function airmassFromAlt(altDeg) {
-  if (altDeg <= 0) return Infinity;
-  return 1 / Math.sin(altDeg * Math.PI / 180);
-}
-
-// Altitude (deg) that yields a given airmass; inverse of airmassFromAlt.
+// Altitude (deg) that yields a given airmass (sec z), for right-axis ticks.
 function altFromAirmass(X) {
   return Math.asin(1 / X) * 180 / Math.PI;
 }
