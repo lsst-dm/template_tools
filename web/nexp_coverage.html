@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no">
 <title>N-Exposure Coverage by Tract</title>
 <script type="text/javascript" src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js" charset="utf-8"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -176,6 +177,44 @@ h1 {
   z-index: 100;
   white-space: nowrap;
 }
+.alt-panel {
+  margin-top: 16px;
+}
+.alt-header {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.alt-header input[type="date"] {
+  background: #021A18;
+  color: #DCE0E3;
+  border: 2px solid #6A6E6E;
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 0.9em;
+}
+.alt-caption {
+  text-align: center;
+  font-size: 0.85em;
+  color: #DCE0E3;
+  margin-bottom: 8px;
+  min-height: 1.2em;
+}
+.alt-caption span { font-weight: 600; color: #F5F5F5; }
+#alt-canvas {
+  width: 100%;
+  height: 340px;
+  display: block;
+}
+.alt-placeholder {
+  text-align: center;
+  color: #6A6E6E;
+  padding: 60px 0;
+  font-size: 1.1em;
+}
 </style>
 </head>
 <body>
@@ -212,6 +251,17 @@ h1 {
     <span style="margin-left:4px; color:#6A6E6E;">nexp</span>
   </div>
 </div>
+<div class="plot-container alt-panel">
+  <div class="alt-header">
+    <div class="control-group">
+      <span class="control-label">Night of:</span>
+      <input type="date" id="alt-date">
+    </div>
+  </div>
+  <div class="alt-caption" id="alt-caption"></div>
+  <div class="alt-placeholder" id="alt-placeholder">Click a tract above to see its visibility from Rubin.</div>
+  <canvas id="alt-canvas"></canvas>
+</div>
 <p class="generated-at" id="generated-at"></p>
 
 <div class="loading" id="loading">Loading data...</div>
@@ -239,6 +289,245 @@ let tractOverlay = null;
 let deployedOverlay = null;
 let tractFootprintData = new Map();
 let minCoverageFrac = 0.25;
+
+// --- Altitude panel: astronomy helpers ---
+// Built lazily so a failed Astronomy Engine load doesn't abort this
+// script at parse time (the drawAltitudePlot guard handles that case).
+let _rubin = null;
+function rubinObserver() {
+  if (!_rubin) _rubin = new Astronomy.Observer(-30.2446, -70.7494, 2663);
+  return _rubin;
+}
+const RUBIN_TZ = 'America/Santiago';
+let selectedTract = null;
+
+// Current calendar date at Rubin, as 'YYYY-MM-DD'.
+function rubinToday() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: RUBIN_TZ }).format(new Date());
+}
+
+// Target RA/Dec for a tract. Uses the first corner ([ra, dec]); precision is
+// not important here and this sidesteps RA-wrap issues when averaging corners.
+function tractTarget(tract) {
+  const c = tract.corners[0];
+  return { ra: c[0], dec: c[1] };
+}
+
+// Night window for the evening of dateStr ('YYYY-MM-DD'): sunset on that date
+// to the following sunrise. Noon UTC of dateStr is always morning at Rubin
+// (UTC-3/-4), so the next set is that evening's sunset.
+function nightWindow(dateStr) {
+  const start = new Date(dateStr + 'T12:00:00Z');
+  const sunset = Astronomy.SearchRiseSet(Astronomy.Body.Sun, rubinObserver(), -1, start, 1);
+  const sunrise = Astronomy.SearchRiseSet(Astronomy.Body.Sun, rubinObserver(), +1, sunset.date, 1);
+  return { start: sunset.date, end: sunrise.date };
+}
+
+// Altitude (deg) of a fixed equatorial target. RA in deg -> sidereal hours.
+function targetAltitude(date, target) {
+  return Astronomy.Horizon(date, rubinObserver(), target.ra / 15, target.dec, 'normal').altitude;
+}
+
+// Altitude (deg) of a solar-system body (Sun, Moon).
+function bodyAltitude(date, body) {
+  const eq = Astronomy.Equator(body, date, rubinObserver(), true, true);
+  return Astronomy.Horizon(date, rubinObserver(), eq.ra, eq.dec, 'normal').altitude;
+}
+
+// Sample the night: target/sun/moon altitude at nSteps+1 evenly spaced instants.
+function sampleNight(win, target, nSteps = 160) {
+  const t0 = win.start.getTime();
+  const t1 = win.end.getTime();
+  const out = [];
+  for (let i = 0; i <= nSteps; i++) {
+    const d = new Date(t0 + (t1 - t0) * i / nSteps);
+    out.push({
+      d,
+      tgt: targetAltitude(d, target),
+      sunAlt: bodyAltitude(d, Astronomy.Body.Sun),
+      moonAlt: bodyAltitude(d, Astronomy.Body.Moon),
+    });
+  }
+  return out;
+}
+
+// Altitude (deg) that yields a given airmass (sec z), for right-axis ticks.
+function altFromAirmass(X) {
+  return Math.asin(1 / X) * 180 / Math.PI;
+}
+
+// Format an instant in a given IANA time zone as HH:MM (24h).
+function fmtTime(date, tz) {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(date);
+}
+
+// Background color for the twilight band at a given Sun altitude (deg).
+// Brighter, white-neutral greys that darken toward true night so the
+// observable window stays the darkest part of the panel.
+function twilightColor(sunAlt) {
+  if (sunAlt > 0) return '#6b7173';    // day
+  if (sunAlt > -6) return '#565c5e';   // civil
+  if (sunAlt > -12) return '#424749';  // nautical
+  if (sunAlt > -18) return '#2d3234';  // astronomical
+  return '#191d1e';                    // night
+}
+
+function showAltPlaceholder(msg) {
+  const ph = document.getElementById('alt-placeholder');
+  const canvas = document.getElementById('alt-canvas');
+  ph.textContent = msg;
+  ph.style.display = 'block';
+  canvas.style.display = 'none';
+  document.getElementById('alt-caption').innerHTML = '';
+}
+
+function drawAltitudePlot() {
+  const canvas = document.getElementById('alt-canvas');
+  const placeholder = document.getElementById('alt-placeholder');
+  const caption = document.getElementById('alt-caption');
+
+  if (!selectedTract) {
+    showAltPlaceholder('Click a tract above to see its visibility from Rubin.');
+    return;
+  }
+  if (typeof Astronomy === 'undefined') {
+    showAltPlaceholder('Astronomy Engine failed to load; altitude plot unavailable.');
+    return;
+  }
+
+  placeholder.style.display = 'none';
+  canvas.style.display = 'block';
+
+  const dateStr = document.getElementById('alt-date').value || rubinToday();
+  const target = tractTarget(selectedTract);
+  const win = nightWindow(dateStr);
+  const samples = sampleNight(win, target);
+  const midDate = new Date((win.start.getTime() + win.end.getTime()) / 2);
+  const moonIllum = Astronomy.Illumination(Astronomy.Body.Moon, midDate).phase_fraction;
+
+  // High-DPI canvas sizing.
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth;
+  const cssH = canvas.clientHeight;
+  canvas.width = cssW * dpr;
+  canvas.height = cssH * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  const m = { top: 36, right: 64, bottom: 38, left: 56 };
+  const W = cssW - m.left - m.right;
+  const H = cssH - m.top - m.bottom;
+  const t0 = win.start.getTime();
+  const t1 = win.end.getTime();
+  const xOf = t => m.left + W * (t - t0) / (t1 - t0);
+  const yOf = alt => m.top + H * (1 - alt / 90);  // 0..90 deg
+
+  // Twilight bands: one vertical rect per sample interval, colored by sun alt.
+  for (let i = 0; i < samples.length - 1; i++) {
+    const x0 = xOf(samples[i].d.getTime());
+    const x1 = xOf(samples[i + 1].d.getTime());
+    ctx.fillStyle = twilightColor(samples[i].sunAlt);
+    ctx.fillRect(x0, m.top, x1 - x0 + 1, H);
+  }
+
+  // Plot frame.
+  ctx.strokeStyle = '#6A6E6E';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(m.left, m.top, W, H);
+
+  const labelColor = '#c8ccce';
+  const titleColor = '#e2e5e6';
+
+  // Left axis: altitude grid + labels (0..90 every 30).
+  ctx.fillStyle = labelColor;
+  ctx.font = '13px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let alt = 0; alt <= 90; alt += 30) {
+    const y = yOf(alt);
+    ctx.strokeStyle = '#ffffff22';
+    ctx.beginPath(); ctx.moveTo(m.left, y); ctx.lineTo(m.left + W, y); ctx.stroke();
+    ctx.fillStyle = labelColor;
+    ctx.fillText(alt + '°', m.left - 6, y);
+  }
+
+  // Right axis: airmass ticks.
+  ctx.textAlign = 'left';
+  for (const X of [1.0, 1.2, 1.5, 2.0, 3.0]) {
+    const y = yOf(altFromAirmass(X));
+    ctx.fillStyle = labelColor;
+    ctx.fillText(X.toFixed(1), m.left + W + 6, y);
+  }
+
+  // Horizon line at 0 deg.
+  ctx.strokeStyle = '#888';
+  ctx.beginPath(); ctx.moveTo(m.left, yOf(0)); ctx.lineTo(m.left + W, yOf(0)); ctx.stroke();
+
+  // X ticks at whole UTC hours within the window (also whole Chile hours).
+  const tickStart = new Date(Math.ceil(t0 / 3.6e6) * 3.6e6);
+  ctx.strokeStyle = '#ffffff22';
+  for (let t = tickStart.getTime(); t <= t1; t += 3.6e6) {
+    const x = xOf(t);
+    ctx.beginPath(); ctx.moveTo(x, m.top); ctx.lineTo(x, m.top + H); ctx.stroke();
+    ctx.fillStyle = labelColor;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'center';
+    ctx.fillText(fmtTime(new Date(t), RUBIN_TZ), x, m.top + H + 6);    // bottom: Chile
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(fmtTime(new Date(t), 'UTC'), x, m.top - 6);          // top: UTC
+  }
+
+  // Axis titles.
+  ctx.fillStyle = titleColor;
+  ctx.font = 'bold 13px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText('Chile local (CLT/CLST)', m.left + W / 2, cssH - 15);
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('UTC', m.left + W / 2, 15);
+
+  // Vertical Y-axis titles: altitude (left), airmass (right).
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.save();
+  ctx.translate(13, m.top + H / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('Altitude (°)', 0, 0);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(cssW - 13, m.top + H / 2);
+  ctx.rotate(Math.PI / 2);
+  ctx.fillText('Airmass', 0, 0);
+  ctx.restore();
+
+  // Curve helper (clips below-horizon to the frame).
+  const drawCurve = (key, color, dash) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash(dash || []);
+    ctx.beginPath();
+    let started = false;
+    for (const s of samples) {
+      const alt = Math.max(0, Math.min(90, s[key]));
+      const x = xOf(s.d.getTime());
+      const y = yOf(alt);
+      if (!started) { ctx.moveTo(x, y); started = true; } else { ctx.lineTo(x, y); }
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  };
+  drawCurve('moonAlt', '#cfd3d6', [5, 4]);                  // Moon: dashed grey
+  drawCurve('tgt', BAND_COLORS[activeBand] || '#00BABC');   // target: band color
+
+  // Caption.
+  caption.innerHTML =
+    `Tract <span>${selectedTract.id}</span> &mdash; ` +
+    `RA <span>${target.ra.toFixed(3)}°</span>, Dec <span>${target.dec.toFixed(3)}°</span> &middot; ` +
+    `Moon <span>${Math.round(moonIllum * 100)}%</span> illuminated`;
+}
 
 function nexpToColor(value) {
   const t = Math.min(Math.max((value - 1) / (10 - 1), 0), 1.0);
@@ -323,9 +612,10 @@ function drawTracts() {
     if (frac === undefined || frac < minCoverageFrac) continue;
 
     const bin = getTractColor(frac);
+    const isSelected = selectedTract && tract.id === selectedTract.id;
     const poly = A.polygon(tract.corners, {
-      color: bin.color,
-      lineWidth: 2,
+      color: isSelected ? '#ffffff' : bin.color,
+      lineWidth: isSelected ? 4 : 2,
       hoverColor: '#ffffff',
     });
     tractFootprintData.set(poly, tract);
@@ -387,6 +677,16 @@ A.init.then(() => {
     }
   });
 
+  aladin.on('footprintClicked', (footprint) => {
+    if (footprint && tractFootprintData.has(footprint)) {
+      selectedTract = tractFootprintData.get(footprint);
+      drawTracts();        // refresh highlight
+      drawAltitudePlot();  // refresh visibility panel
+    }
+  });
+
+  window.addEventListener('resize', () => { if (selectedTract) drawAltitudePlot(); });
+
   Promise.all([
     fetch('nexp_dashboard_data.json').then(r => r.json()),
     fetch('deployed_template_data.json').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).catch(e => { console.warn('deployed_template_data.json not loaded:', e); return null; }),
@@ -444,6 +744,11 @@ function init() {
   if (DATA.generated_at) {
     document.getElementById('generated-at').textContent = 'Data generated: ' + DATA.generated_at;
   }
+
+  const altDate = document.getElementById('alt-date');
+  altDate.value = rubinToday();
+  altDate.addEventListener('change', drawAltitudePlot);
+  drawAltitudePlot();  // show placeholder until a tract is clicked
 
   redraw();
 }
