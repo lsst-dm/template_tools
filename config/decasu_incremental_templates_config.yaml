@@ -1,6 +1,6 @@
 outbase: "incremental_template_inputs"
 use_lsst_consdb: true
-nside: 1024
+nside: 256
 map_types:
   nexp: ["sum"]
   psf_fwhm: ["mean"]
