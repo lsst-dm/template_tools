@@ -29,11 +29,18 @@ python scripts/query_embargo_templates.py          # deployed-template JSON + ma
 
 ### Candidate Template Input Maps
 
+First, generate the bad visits list:
+
+```bash
+python scripts/write_bad_visits.py -o config/bad_visits.ecsv
+```
+
 Run decasu first:
 
 ```bash
-mkdir output_incremental_test
-decasu_hpix_mapper.py -c decasu_incremental_templates_config.yaml -n 8 -i postgresql://usdf@usdf-summitdb-logical-replica-svc.sdf.slac.stanford.edu/exposurelog -o output_incremental_test -m >& log_decasu_incremental.txt
+export OUTDIR=output_incremental_test
+mkdir $OUTDIR
+decasu_hpix_mapper.py -c config/decasu_incremental_templates_config.yaml -x config/bad_visits.ecsv -n 8 -i postgresql://usdf@usdf-summitdb-logical-replica-svc.sdf.slac.stanford.edu/exposurelog -o $OUTDIR -m >& $OUTDIR/log_decasu_incremental.txt
 ```
 
 ```bash
