@@ -1,0 +1,34 @@
+jiraIssueID: "" # The ticket number associated with this curation run.
+stackRelease: "" # The CVMFS weekly to be set up.
+releaseID: "" # A field or other way to distinguish between candidate runs.
+source: "" # Short indicator of where the templates come from, IE prompt_template.
+
+project: "TemplateCoadd-HiPS"
+campaign: "{jiraIssueID}"
+
+payload:
+  runInit: true
+  payloadName: "{source}-{releaseID}"
+
+numberOfRetries: 3
+
+pipetask:
+  pipetaskInit:
+    priority: 950
+  prettyPictureTask:
+    requestMemory: 32000
+
+requestMemory: 8000
+
+provisionResources: true
+provisioning:
+  provisioningMaxWallTime: 3-00:00:00
+  provisioningAccountingUser: "rubin:production"
+  provisioningQueue: "milano"
+
+includeConfigs:
+  - "${TEMPLATE_TOOLS_DIR}/bps/clustering/clustering_MakeHips.yaml"
+
+setupLSSTEnv: >
+  source /cvmfs/sw.lsst.eu/almalinux-x86_64/lsst_distrib/{stackRelease}/loadLSST.bash;
+  setup lsst_distrib;
