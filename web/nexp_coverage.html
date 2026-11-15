@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no">
 <title>N-Exposure Coverage by Tract</title>
-<script type="text/javascript" src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
+<script type="text/javascript" src="aladin_config.js" charset="utf-8"></script>
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js" charset="utf-8"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -266,7 +266,13 @@ h1 {
 
 <div class="loading" id="loading">Loading data...</div>
 
-<script>
+<script type="module">
+// Aladin Lite source (CDS primary vs. mirror) is selected in aladin_config.js.
+const { A, survey } = await loadAladin().catch(e => {
+  document.getElementById('loading').textContent = 'Could not load Aladin Lite: ' + e;
+  throw e;
+});
+
 const BAND_COLORS = {
   u: '#3eb7ff', g: '#30c39f', r: '#ff7e00',
   i: '#2af5ff', z: '#a7f9c1', y: '#fdc900'
@@ -651,54 +657,52 @@ function redraw() {
   drawTracts();
 }
 
-A.init.then(() => {
-  aladin = A.aladin('#aladin-lite-div', {
-    fov: 360,
-    target: '0 0',
-    projection: 'AIT',
-    cooFrame: 'equatorial',
-    showCooGridControl: true,
-    showSimbadPointerControl: false,
-    showCooGrid: true,
-    survey: 'P/DSS2/color',
-  });
+aladin = A.aladin('#aladin-lite-div', {
+  fov: 360,
+  target: '0 0',
+  projection: 'AIT',
+  cooFrame: 'equatorial',
+  showCooGridControl: true,
+  showSimbadPointerControl: false,
+  showCooGrid: true,
+  survey,
+});
 
-  const tooltip = document.getElementById('tooltip');
-  aladin.on('footprintHovered', (footprint, xy) => {
-    if (footprint && tractFootprintData.has(footprint)) {
-      const tract = tractFootprintData.get(footprint);
-      const frac = tract.f[activeThreshold];
-      tooltip.textContent = `Tract ${tract.id} — ${Math.round(frac * 100)}% ≥ ${activeThreshold}`;
-      tooltip.style.left = (xy.x + 12) + 'px';
-      tooltip.style.top = (xy.y - 20) + 'px';
-      tooltip.style.display = 'block';
-    } else {
-      tooltip.style.display = 'none';
-    }
-  });
+const tooltip = document.getElementById('tooltip');
+aladin.on('footprintHovered', (footprint, xy) => {
+  if (footprint && tractFootprintData.has(footprint)) {
+    const tract = tractFootprintData.get(footprint);
+    const frac = tract.f[activeThreshold];
+    tooltip.textContent = `Tract ${tract.id} — ${Math.round(frac * 100)}% ≥ ${activeThreshold}`;
+    tooltip.style.left = (xy.x + 12) + 'px';
+    tooltip.style.top = (xy.y - 20) + 'px';
+    tooltip.style.display = 'block';
+  } else {
+    tooltip.style.display = 'none';
+  }
+});
 
-  aladin.on('footprintClicked', (footprint) => {
-    if (footprint && tractFootprintData.has(footprint)) {
-      selectedTract = tractFootprintData.get(footprint);
-      drawTracts();        // refresh highlight
-      drawAltitudePlot();  // refresh visibility panel
-    }
-  });
+aladin.on('footprintClicked', (footprint) => {
+  if (footprint && tractFootprintData.has(footprint)) {
+    selectedTract = tractFootprintData.get(footprint);
+    drawTracts();        // refresh highlight
+    drawAltitudePlot();  // refresh visibility panel
+  }
+});
 
-  window.addEventListener('resize', () => { if (selectedTract) drawAltitudePlot(); });
+window.addEventListener('resize', () => { if (selectedTract) drawAltitudePlot(); });
 
-  Promise.all([
-    fetch('nexp_dashboard_data.json').then(r => r.json()),
-    fetch('deployed_template_data.json').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).catch(e => { console.warn('deployed_template_data.json not loaded:', e); return null; }),
-  ]).then(([nexpData, deployedData]) => {
-    DATA = nexpData;
-    DEPLOYED = deployedData;
-    document.getElementById('loading').style.display = 'none';
-    init();
-  }).catch(e => {
-    document.getElementById('loading').textContent =
-      'Could not load data: ' + e;
-  });
+Promise.all([
+  fetch('nexp_dashboard_data.json').then(r => r.json()),
+  fetch('deployed_template_data.json').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).catch(e => { console.warn('deployed_template_data.json not loaded:', e); return null; }),
+]).then(([nexpData, deployedData]) => {
+  DATA = nexpData;
+  DEPLOYED = deployedData;
+  document.getElementById('loading').style.display = 'none';
+  init();
+}).catch(e => {
+  document.getElementById('loading').textContent =
+    'Could not load data: ' + e;
 });
 
 function init() {

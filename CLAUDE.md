@@ -83,11 +83,29 @@ python scripts/healpix_to_tracts.py                    # -> output/tract_nexp_fr
 Both accept `--input-dir`, `--bands`, `--butler-repo`, and (for the dashboard
 generator) `--display-nside`.
 
+### Aladin Lite source (CDS primary vs. mirror)
+
+Both dashboards load Aladin Lite via `web/aladin_config.js`, which exposes
+`window.loadAladin()` and resolves to `{ A, survey }`. The HTML pages run
+their main code in a `<script type="module">` so they can `await` it. The
+`ALADIN_SOURCE` constant in that file selects the backend:
+
+- `cds` — classic script from `aladin.cds.unistra.fr` (defines global `A`),
+  survey `P/DSS2/color` (resolved via the CDS MocServer).
+- `mirror` — pinned npm build from jsDelivr (an ES module whose default
+  export is `A`), survey loaded directly from
+  `https://skies.esac.esa.int/DSSColor` so no CDS lookup is needed.
+
+A `?aladin=cds|mirror` URL query parameter overrides the file setting for
+testing. The two builds load differently (classic script vs. `import()`), so
+keep both code paths in `loadAladin()` when adding a new source.
+
 ### Deploy
 
-Each dashboard has its own production + dev sync script. They push the HTML and
-the JSON each dashboard fetches, then make the files world-readable. All four
-scripts `cd` to the repo root and source HTML + JSON from `web/`.
+Each dashboard has its own production + dev sync script. They push the HTML,
+`aladin_config.js`, and the JSON each dashboard fetches, then make the files
+world-readable. All four scripts `cd` to the repo root and source files from
+`web/`.
 
 ```bash
 # Deployed-template dashboard (web/template_coverage.html + web/deployed_template_data.json)

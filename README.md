@@ -29,11 +29,18 @@ python scripts/query_embargo_templates.py          # deployed-template JSON + ma
 
 ### Candidate Template Input Maps
 
+First, generate the bad visits list:
+
+```bash
+python scripts/write_bad_visits.py -o config/bad_visits.ecsv
+```
+
 Run decasu first:
 
 ```bash
-mkdir output_incremental_test
-decasu_hpix_mapper.py -c decasu_incremental_templates_config.yaml -n 8 -i postgresql://usdf@usdf-summitdb-logical-replica-svc.sdf.slac.stanford.edu/exposurelog -o output_incremental_test -m >& log_decasu_incremental.txt
+export OUTDIR=output_incremental_test
+mkdir $OUTDIR
+decasu_hpix_mapper.py -c config/decasu_incremental_templates_config.yaml -x config/bad_visits.ecsv -n 8 -i postgresql://usdf@usdf-summitdb-logical-replica-svc.sdf.slac.stanford.edu/exposurelog -o $OUTDIR -m >& $OUTDIR/log_decasu_incremental.txt
 ```
 
 ```bash
@@ -48,11 +55,25 @@ python scripts/healpix_to_tracts.py                # -> output/tract_nexp_fracti
 ```
 
 
+## Aladin Lite source (CDS vs. mirror)
+
+Both dashboards load the Aladin Lite library and the DSS2 background survey
+through `web/aladin_config.js`. Set `ALADIN_SOURCE` there to:
+
+- `'cds'` — the primary CDS host (`aladin.cds.unistra.fr`) and the
+  `P/DSS2/color` HiPS ID.
+- `'mirror'` — the jsDelivr npm build of Aladin Lite plus the DSS2 color HiPS
+  from ESA's mirror; use this when the CDS host is unreachable.
+
+Redeploy with the sync scripts after changing it. For a quick check without
+redeploying, append `?aladin=cds` or `?aladin=mirror` to a dashboard URL.
+
 ## Layout
 
 - `scripts/` — data generators and shared `common.py`.
-- `web/` — the two dashboards (HTML). Generators write their JSON here
-  (gitignored); the dashboards `fetch()` it by bare filename.
+- `web/` — the two dashboards (HTML) plus `aladin_config.js`. Generators
+  write their JSON here (gitignored); the dashboards `fetch()` it by bare
+  filename.
 - `deploy/` — production + dev rsync scripts (one pair per dashboard).
 - `config/` — the external decasu config that produces the `.hsp` nexp inputs.
 - `output/` — generated FITS/PNG/CSV/logs (gitignored).

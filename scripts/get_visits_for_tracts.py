@@ -6,6 +6,8 @@ from rubin_nights import connections
 from rubin_nights.augment_visits import fetch_excluded_visits
 import rubin_nights.dayobs_utils as rn_dayobs
 
+from common import get_endpoints, get_bad_visit_lists
+
 import yaml
 
 def get_visits_for_tracts(tracts, band, endpoints):
@@ -18,14 +20,15 @@ def get_visits_for_tracts(tracts, band, endpoints):
             instrument="LSSTCam", skymap="lsst_cells_v2",
             bind={"tracts":tracts}))
 
-    butler_visits = [data_id['visit'] for data_id in data_ids]
+    # data_ids has one row per (visit, tract) pair, so deduplicate
+    butler_visits = sorted({data_id['visit'] for data_id in data_ids})
     print(f'{len(butler_visits)} in the Butler in band {band}, tracts {tracts}')
 
     # get consdb values for these visits, filtered by our selection criteria
-    consdb_visits = select_from_consdb(butler_visits, endpoints) 
+    consdb_visits = select_from_consdb(butler_visits, endpoints)
     print(f'{len(consdb_visits)} pass consdb cuts')
 
-    filtered_visits = np.setdiff1d(butler_visits, consdb_visits)
+    filtered_visits = np.intersect1d(butler_visits, consdb_visits)
 
 
     # remove anything on the bad visit list
@@ -74,52 +77,6 @@ def visit_id_to_dayobs(visit_id):
     return f'{datestr[:4]}-{datestr[4:6]}-{datestr[6:8]}'
 
 
-def get_bad_visit_lists(endpoints, day_obs_min, day_obs_max):
-    # https://rubin-obs.slack.com/archives/C07QKKBUME3/p1780095120669989?thread_ts=1779774837.514619&cid=C07QKKBUME3
-
-    # Pull lsst-dm excluded visit list to flag bad visits
-    bad_visit_ids = fetch_excluded_visits("lsstcam")
-    # Also pull bad visit lists from exposure log
-    all_exp_log_bad_visit_ids = []
-    ee = endpoints['exposure_log'].query_log(rn_dayobs.day_obs_to_time(day_obs_min), rn_dayobs.day_obs_to_time(day_obs_max))
-    if len(ee) > 0:
-        def make_visit_id(x):
-            return f"{x.day_obs:d}{x.seq_num:05d}"
-        exp_log_bad_visit_ids = ee.query("exposure_flag == 'junk'").apply(make_visit_id, axis=1).values
-        if len(exp_log_bad_visit_ids) > 0:
-            all_exp_log_bad_visit_ids.extend(exp_log_bad_visit_ids)
-
-    bad_visit_ids.extend(all_exp_log_bad_visit_ids)
-
-    return set(bad_visit_ids)
-
-def get_endpoints():
-    # Where is the notebook running? (RSPs are 'special')
-    current_location = os.getenv("EXTERNAL_INSTANCE_URL", "")
-
-    # RUBIN_SIM_DATA_DIR at usdf
-    if 'usdf' in current_location:
-        os.environ["RUBIN_SIM_DATA_DIR"] = "/sdf/data/rubin/shared/rubin_sim_data"
-
-    # TOKEN CONFIGURATION
-    if current_location != "":
-        # You are on an rsp.
-        # You should use the default RSP values, whether summit/base/USDF.
-        tokenfile = None
-        site = None
-    # If you are outside of an RSP? - just use USDF and your own USDF-RSP token
-    # See https://rsp.lsst.io/guides/auth/creating-user-tokens.html
-    else:
-        # Substitute the location of your own tokenfile
-        tokenfile = os.getenv("ACCESS_TOKEN_FILE", "")
-        site = os.getenv("DATA_SITE", "")
-        if tokenfile == "":
-            # A very reasonable backup.
-            tokenfile = os.path.join(os.path.expanduser("~"), ".lsst/usdf_rsp")
-            site = 'usdf'
-
-    return connections.get_clients(tokenfile, site)
-
 
 if __name__ == "__main__":
     pass
@@ -129,6 +86,9 @@ if __name__ == "__main__":
     z_visits = get_visits_for_tracts([1448, 1449, 1450, 1321, 1322, 1323],"z", endpoints)
 
 
+#    tracts = [7023, 7024, 7259]
+#    for band in ["u","g","r","i","z","y"]:
+#        print(band, get_visits_for_tracts(tracts, band, endpoints))
+
     print(i_visits)
     print(z_visits)
-
