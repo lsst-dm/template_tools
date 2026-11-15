@@ -82,13 +82,13 @@ if __name__ == "__main__":
     pass
 
     endpoints = get_endpoints()
-    #i_visits = get_visits_for_tracts([1448, 1449, 1450, 1321, 1322, 1323],"i", endpoints)
-    #z_visits = get_visits_for_tracts([1448, 1449, 1450, 1321, 1322, 1323],"z", endpoints)
+    i_visits = get_visits_for_tracts([1448, 1449, 1450, 1321, 1322, 1323],"i", endpoints)
+    z_visits = get_visits_for_tracts([1448, 1449, 1450, 1321, 1322, 1323],"z", endpoints)
 
 
-    tracts = [7023, 7024, 7259]
-    for band in ["u","g","r","i","z","y"]:
-        print(band, get_visits_for_tracts(tracts, band, endpoints))
+#    tracts = [7023, 7024, 7259]
+#    for band in ["u","g","r","i","z","y"]:
+#        print(band, get_visits_for_tracts(tracts, band, endpoints))
 
- #   print(i_visits)
- #   print(z_visits)
+    print(i_visits)
+    print(z_visits)

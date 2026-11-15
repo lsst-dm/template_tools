@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no">
 <title>Alert Production Template Coverage</title>
-<script type="text/javascript" src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
+<script type="text/javascript" src="aladin_config.js" charset="utf-8"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -88,7 +88,13 @@ h1 {
 </div>
 <p class="generated-at" id="generated-at"></p>
 
-<script>
+<script type="module">
+// Aladin Lite source (CDS primary vs. mirror) is selected in aladin_config.js.
+const { A, survey } = await loadAladin().catch(e => {
+  document.getElementById('summary').textContent = 'Could not load Aladin Lite: ' + e;
+  throw e;
+});
+
 const BAND_COLORS = {
   u: '#3eb7ff', g: '#30c39f', r: '#ff7e00',
   i: '#2af5ff', z: '#a7f9c1', y: '#fdc900'
@@ -99,25 +105,23 @@ let aladin;
 let activeBands = new Set();
 let overlays = {};
 
-A.init.then(() => {
-  aladin = A.aladin('#aladin-lite-div', {
-    fov: 180,
-    projection: 'AIT',
-    cooFrame: 'equatorial',
-    showCooGridControl: true,
-    showSimbadPointerControl: false,
-    showCooGrid: true,
-    survey: 'P/DSS2/color',
-  });
-
-  fetch('deployed_template_data.json')
-    .then(r => r.json())
-    .then(d => { DATA = d; init(); })
-    .catch(e => {
-      document.getElementById('summary').textContent =
-        'Could not load deployed_template_data.json. Place it alongside this HTML file. Error: ' + e;
-    });
+aladin = A.aladin('#aladin-lite-div', {
+  fov: 180,
+  projection: 'AIT',
+  cooFrame: 'equatorial',
+  showCooGridControl: true,
+  showSimbadPointerControl: false,
+  showCooGrid: true,
+  survey,
 });
+
+fetch('deployed_template_data.json')
+  .then(r => r.json())
+  .then(d => { DATA = d; init(); })
+  .catch(e => {
+    document.getElementById('summary').textContent =
+      'Could not load deployed_template_data.json. Place it alongside this HTML file. Error: ' + e;
+  });
 
 function init() {
   const bands = ['u', 'g', 'r', 'i', 'z', 'y'].filter(b => b in DATA.summary);

@@ -55,11 +55,25 @@ python scripts/healpix_to_tracts.py                # -> output/tract_nexp_fracti
 ```
 
 
+## Aladin Lite source (CDS vs. mirror)
+
+Both dashboards load the Aladin Lite library and the DSS2 background survey
+through `web/aladin_config.js`. Set `ALADIN_SOURCE` there to:
+
+- `'cds'` — the primary CDS host (`aladin.cds.unistra.fr`) and the
+  `P/DSS2/color` HiPS ID.
+- `'mirror'` — the jsDelivr npm build of Aladin Lite plus the DSS2 color HiPS
+  from ESA's mirror; use this when the CDS host is unreachable.
+
+Redeploy with the sync scripts after changing it. For a quick check without
+redeploying, append `?aladin=cds` or `?aladin=mirror` to a dashboard URL.
+
 ## Layout
 
 - `scripts/` — data generators and shared `common.py`.
-- `web/` — the two dashboards (HTML). Generators write their JSON here
-  (gitignored); the dashboards `fetch()` it by bare filename.
+- `web/` — the two dashboards (HTML) plus `aladin_config.js`. Generators
+  write their JSON here (gitignored); the dashboards `fetch()` it by bare
+  filename.
 - `deploy/` — production + dev rsync scripts (one pair per dashboard).
 - `config/` — the external decasu config that produces the `.hsp` nexp inputs.
 - `output/` — generated FITS/PNG/CSV/logs (gitignored).
