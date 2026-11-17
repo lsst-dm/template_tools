@@ -1,0 +1,36 @@
+jiraIssueID: "" # The ticket number associated with this curation.
+stackRelease: "" # The CVMFS weekly to be set up.
+releaseID: "" # A field or other way to distinguish between candidate runs.
+
+# If running singleFrame:
+# pipelineYaml: "${AP_PIPE_DIR}/pipelines/LSSTCam/QuickTemplate.yaml#singleFrame"
+# includeConfigs: "${AP_PIPE_DIR}/bps/clustering/clustering_PromptTemplate.yaml"
+
+# If starting from PVI:
+pipelineYaml: "${AP_PIPE_DIR}/pipelines/LSSTCam/PromptTemplate.yaml"
+includeConfigs: "${AP_PIPE_DIR}/bps/clustering/clustering_PromptTemplate.yaml"
+
+project: "PromptTemplate"
+campaign: "{jiraIssueID}"
+
+payload:
+  payloadName: "{campaign}/templates/{stackRelease}/{releaseID}"
+  butlerConfig: main
+  inCollection: LSSTCam/defaults
+  # inCollection: "u/{operator}/{campaign}/{payloadName}" # If running two steps.
+  dataQuery: >- 
+      instrument='LSSTCam'
+      AND skymap='lsst_cells_v2'
+      AND (detector<189 AND NOT (detector IN (120,122,0,20,27,65,123,161,168,188,1,19,30,68,158,169,187)))
+
+extraQgraphOptions: "--dataset-query-constraint off" # If using a visit table, add  --data-id-table visits.ecsv
+
+provisionResources: true
+provisioning:
+  provisioningMaxWallTime: 3-00:00:00
+  provisioningAccountingUser: "rubin:production"
+  provisioningQueue: "milano"
+
+setupLSSTEnv: >
+  source /cvmfs/sw.lsst.eu/almalinux-x86_64/lsst_distrib/{stackRelease}/loadLSST.bash;
+  setup lsst_distrib;

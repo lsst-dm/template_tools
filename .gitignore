@@ -15,3 +15,17 @@ output_incremental_test/
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Built by sconsUtils
+version.py
+bin/*.py
+python/*.dist-info
+.sconsign.dblite
+config.log
+
+# Pytest
+tests/.tests
+pytest_session.txt
+.cache/
+.pytest_cache
+.coverage

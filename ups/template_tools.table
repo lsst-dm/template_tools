@@ -1,0 +1,11 @@
+# List EUPS dependencies of this package here.
+# - Any package whose API is used directly should be listed explicitly.
+# - Common third-party packages can be assumed to be recursively included by
+#   the "base" package.
+setupRequired(base)
+setupRequired(sconsUtils)
+setupRequired(utils)         # Used by scripts in bin.src and tests.
+setupRequired(daf_butler)    # Used by curate_templates.py.
+
+envPrepend(PYTHONPATH, ${PRODUCT_DIR}/python)
+envPrepend(PATH, ${PRODUCT_DIR}/bin)
