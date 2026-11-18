@@ -5,7 +5,8 @@ They are staged in the `DECam/templates_prep` chained collection in the `main`
 repo by two scripts:
 
 - `scripts/template_curation/curate_decam_templates.py` adds a new release of DECam templates,
-  skipping what is already covered.
+  skipping tract/bands that LSSTCam templates cover and patches that earlier
+  DECam releases cover.
 - `scripts/template_curation/prune_decam_templates.py` drops DECam templates from the chain once
   new LSSTCam templates cover them.
 
@@ -33,14 +34,28 @@ butler query-collections main "DECam/templates/DM-57022/*"
 
 ## Selection
 
-Templates are selected by tract and band. A tract/band is skipped entirely if
-any patch of it already has a template in either of:
+LSSTCam templates take precedence over DECam templates for a whole tract and
+band, while DECam releases can add to each other patch by patch:
 
-- `LSSTCam/templates_prep` (dataset type `template_coadd`), or
-- `DECam/templates_prep`, from an earlier DECam release.
+- A tract/band is skipped entirely if any patch of it already has a template
+  in `LSSTCam/templates_prep` (dataset type `template_coadd`).
+- Otherwise, each patch that already has a template in `DECam/templates_prep`,
+  from an earlier DECam release, is skipped, and the new patches are kept.
 
-A tract/band is therefore in at most one release in `DECam/templates_prep`, so
-the order of the chain does not change which template is found.
+A tract/band can therefore be split across several releases, but each patch is
+in at most one release in `DECam/templates_prep`, so the order of the chain
+does not change which template is found. For example, a second release that
+overlaps the first in two tract/bands logs:
+
+```
+INFO:curate_decam_templates:Tract 0 band g (2 patches): skipped, already covered in LSSTCam/templates_prep.
+INFO:curate_decam_templates:Tract 0 band r (6 patches): kept 4, 2 already in DECam/templates_prep.
+INFO:curate_decam_templates:Tract 1 band g (8 patches): kept 4, 4 already in DECam/templates_prep.
+INFO:curate_decam_templates:Tract 1 band i (4 patches): kept.
+INFO:curate_decam_templates:Selected 12 of 20 datasets, 3 of 4 tract/bands.
+```
+
+A template for one detector can be built from patches of different releases.
 
 Both scripts require `--skymap` and only work on templates with that skymap.
 Templates with other skymaps are ignored, and the script logs which other
@@ -60,7 +75,7 @@ python scripts/template_curation/curate_decam_templates.py main DECam/templates/
 ```
 
 ```
-INFO:curate_decam_templates:Found 16 template_coadd_decam datasets in DECam/templates/DM-57022/release_01/run.
+INFO:curate_decam_templates:Found 16 template_coadd_decam datasets with skymap lsst_cells_v2 in DECam/templates/DM-57022/release_01/run.
 INFO:curate_decam_templates:Tract 0 band g (6 patches): skipped, already covered in LSSTCam/templates_prep.
 INFO:curate_decam_templates:Tract 0 band r (6 patches): kept.
 INFO:curate_decam_templates:Tract 1 band g (4 patches): kept.
@@ -113,10 +128,11 @@ leaves nothing behind and the script can be run again.
 
 ### Replacing a release
 
-Because earlier releases count as coverage, a second release of the same sky
-area is skipped entirely. To replace a release, first remove its TAGGED
-collection from the chain, then stage the replacement under an unused release
-number:
+Because patches in earlier releases count as coverage, a second release of the
+same sky area only adds the patches that are not staged yet; the earlier
+versions of the other patches stay in use. To replace a release, first remove
+its TAGGED collection from the chain, then stage the replacement under an
+unused release number:
 
 ```bash
 butler collection-chain main DECam/templates_prep --mode remove DECam/templates/DM-57022/release_01
@@ -129,6 +145,8 @@ When new LSSTCam templates are added to `LSSTCam/templates_prep`, run
 `prune_decam_templates.py` to drop the DECam templates they cover. For each
 release in `DECam/templates_prep`, every tract/band with at least one patch in
 `LSSTCam/templates_prep` is dropped, the same rule the curation script uses.
+If the patches of a tract/band are split across several releases, it is dropped
+from each of them.
 A release that loses templates is replaced in the chain, at the same position,
 by a new TAGGED collection with the next unused release number. A release that
 loses all of its templates is removed from the chain. The old TAGGED

@@ -29,7 +29,8 @@ collection ``DECam/templates/<ticket>/<release>``, and prepends that collection
 to the ``DECam/templates_prep`` chain.
 
 A tract/band combination is skipped entirely if any patch of it already has a
-template in ``LSSTCam/templates_prep`` or in ``DECam/templates_prep``. The
+template in ``LSSTCam/templates_prep``. Otherwise, only the patches that
+already have a template in ``DECam/templates_prep`` are skipped. The
 templates are tagged, not copied. Only templates on the skymap given by
 ``--skymap`` are considered; templates on other skymaps are ignored.
 
@@ -176,8 +177,8 @@ def log_other_skymaps(butler, collection, dataset_types, skymap, log):
         )
 
 
-def get_covered(butler, collection, dataset_type, skymap, tracts):
-    """Return the tract/bands with at least one patch in a collection.
+def get_covered(butler, collection, dataset_type, skymap, tracts, by_patch=False):
+    """Return the tract/bands or patches with datasets in a collection.
 
     Parameters
     ----------
@@ -191,11 +192,14 @@ def get_covered(butler, collection, dataset_type, skymap, tracts):
         The skymap of the tracts.
     tracts : `set` [`int`]
         The tracts to search.
+    by_patch : `bool`, optional
+        Whether to return patches instead of tract/bands.
 
     Returns
     -------
-    covered : `set` [`tuple` [`int`, `str`]]
-        The (tract, band) pairs with at least one dataset.
+    covered : `set` [`tuple`]
+        The (tract, band) pairs with at least one dataset, or the
+        (tract, patch, band) triples with a dataset if ``by_patch`` is set.
     """
     if dataset_type not in butler.registry.getCollectionSummary(collection).dataset_types.names:
         return set()
@@ -209,6 +213,8 @@ def get_covered(butler, collection, dataset_type, skymap, tracts):
         limit=None,
         explain=False,
     )
+    if by_patch:
+        return {(ref.dataId["tract"], ref.dataId["patch"], ref.dataId["band"]) for ref in refs}
     return {(ref.dataId["tract"], ref.dataId["band"]) for ref in refs}
 
 
@@ -270,7 +276,7 @@ def main():
         butler, args.existing_collection, args.existing_dataset_type, skymap, tracts
     )
     if chain_exists:
-        covered_decam = get_covered(butler, args.chain, args.dataset_type, skymap, tracts)
+        covered_decam = get_covered(butler, args.chain, args.dataset_type, skymap, tracts, by_patch=True)
     else:
         covered_decam = set()
 
@@ -279,12 +285,17 @@ def main():
     for (tract, band), band_refs in sorted(patches.items()):
         if (tract, band) in covered_lsstcam:
             status = f"skipped, already covered in {args.existing_collection}"
-        elif (tract, band) in covered_decam:
-            status = f"skipped, already covered in {args.chain}"
         else:
-            status = "kept"
-            selected.extend(band_refs)
-            n_kept += 1
+            new_refs = [ref for ref in band_refs if (tract, ref.dataId["patch"], band) not in covered_decam]
+            n_in_chain = len(band_refs) - len(new_refs)
+            if not new_refs:
+                status = f"skipped, all patches already in {args.chain}"
+            elif n_in_chain:
+                status = f"kept {len(new_refs)}, {n_in_chain} already in {args.chain}"
+            else:
+                status = "kept"
+            selected.extend(new_refs)
+            n_kept += bool(new_refs)
         _log.info("Tract %d band %s (%d patches): %s.", tract, band, len(band_refs), status)
     _log.info(
         "Selected %d of %d datasets, %d of %d tract/bands.", len(selected), len(refs), n_kept, len(patches)

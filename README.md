@@ -58,7 +58,8 @@ python scripts/healpix_to_tracts.py                # -> output/tract_nexp_fracti
 
 `scripts/template_curation/curate_decam_templates.py` adds a release of DECam templates to the
 `DECam/templates_prep` collection in `main`, skipping any tract/band already
-covered by LSSTCam templates or an earlier DECam release:
+covered by LSSTCam templates and any patch already staged by an earlier DECam
+release:
 
 ```bash
 python scripts/template_curation/curate_decam_templates.py main DECam/templates/DM-57022/release_01/run --skymap lsst_cells_v2 --dry-run
