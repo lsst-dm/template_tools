@@ -54,6 +54,39 @@ If you want a csv file for analysis:
 python scripts/healpix_to_tracts.py                # -> output/tract_nexp_fractions.csv
 ```
 
+## Curate DECam templates
+
+`scripts/template_curation/curate_decam_templates.py` adds a release of DECam templates to the
+`DECam/templates_prep` collection in `main`, skipping any tract/band already
+covered by LSSTCam templates or an earlier DECam release:
+
+```bash
+python scripts/template_curation/curate_decam_templates.py main DECam/templates/DM-57022/release_01/run --skymap lsst_cells_v2 --dry-run
+python scripts/template_curation/curate_decam_templates.py main DECam/templates/DM-57022/release_01/run --skymap lsst_cells_v2
+```
+
+After new LSSTCam templates are deployed, `scripts/template_curation/prune_decam_templates.py`
+drops the DECam templates they now cover:
+
+```bash
+python scripts/template_curation/prune_decam_templates.py main --skymap lsst_cells_v2 --dry-run
+python scripts/template_curation/prune_decam_templates.py main --skymap lsst_cells_v2
+```
+
+See [docs/curate_decam_templates.md](docs/curate_decam_templates.md) for details.
+
+## Template coverage reports
+
+`scripts/template_curation/template_coverage_report.py` writes `template_coverage_report_<band>.csv`
+for each band, with one row per tract: which collections have templates there,
+patch counts and coverage percentage, chain members, and ingest dates.
+
+```bash
+python scripts/template_curation/template_coverage_report.py main LSSTCam/templates_prep DECam/templates_prep --skymap lsst_cells_v2
+```
+
+See [docs/template_coverage_report.md](docs/template_coverage_report.md) for the
+columns.
 
 ## Aladin Lite source (CDS vs. mirror)
 
@@ -71,6 +104,8 @@ redeploying, append `?aladin=cds` or `?aladin=mirror` to a dashboard URL.
 ## Layout
 
 - `scripts/` — data generators and shared `common.py`.
+- `scripts/template_curation/` — scripts that stage, prune, and report on
+  template collections (see `docs/`).
 - `web/` — the two dashboards (HTML) plus `aladin_config.js`. Generators
   write their JSON here (gitignored); the dashboards `fetch()` it by bare
   filename.
