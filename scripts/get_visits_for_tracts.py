@@ -1,14 +1,26 @@
+#!/usr/bin/env python
+"""List good visits overlapping a set of tracts.
 
-import os
+Reads a tract-list CSV (as written by ``select_visible_tracts.py``), finds the
+visits in the ``main`` Butler that overlap those tracts in the requested band,
+applies the decasu consdb quality selection, removes known bad visits, and
+writes the surviving visit IDs to a CSV with a single ``visit`` column.
+"""
+
+import argparse
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
 from lsst.daf.butler import Butler
-from rubin_nights import connections
-from rubin_nights.augment_visits import fetch_excluded_visits
-import rubin_nights.dayobs_utils as rn_dayobs
 
 from common import get_endpoints, get_bad_visit_lists
 
 import yaml
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+OUTPUT_DIR = REPO_ROOT / "output"
+DECASU_CONFIG = REPO_ROOT / "config" / "decasu_incremental_templates_config.yaml"
 
 def get_visits_for_tracts(tracts, band, endpoints):
 
@@ -22,14 +34,15 @@ def get_visits_for_tracts(tracts, band, endpoints):
 
     # data_ids has one row per (visit, tract) pair, so deduplicate
     butler_visits = sorted({data_id['visit'] for data_id in data_ids})
-    print(f'{len(butler_visits)} in the Butler in band {band}, tracts {tracts}')
+    print(f'{len(butler_visits)} visits in the Butler in band {band} for {len(tracts)} tracts')
 
     # get consdb values for these visits, filtered by our selection criteria
     consdb_visits = select_from_consdb(butler_visits, endpoints)
     print(f'{len(consdb_visits)} pass consdb cuts')
 
     filtered_visits = np.intersect1d(butler_visits, consdb_visits)
-
+    if len(filtered_visits) == 0:
+        return []
 
     # remove anything on the bad visit list
     min_visit_id = min(filtered_visits)
@@ -66,7 +79,7 @@ def get_consdb_where():
     """Use the same selection as in our decasu plots.
     """
 
-    with open("../config/decasu_incremental_templates_config.yaml") as f:
+    with open(DECASU_CONFIG) as f:
         data = yaml.safe_load(f)
 
     return data["lsst_db_additional_selection"]
@@ -78,17 +91,58 @@ def visit_id_to_dayobs(visit_id):
 
 
 
-if __name__ == "__main__":
-    pass
+def read_tract_list(path, band=None):
+    """Return ``(tracts, band)`` from a tract-list CSV.
+
+    The CSV must have a ``tract`` column. If ``band`` is not given it is taken
+    from the CSV's ``band`` column, which must then hold a single value.
+    """
+    df = pd.read_csv(path)
+    if "tract" not in df.columns:
+        raise ValueError(f"{path} has no 'tract' column")
+    tracts = sorted({int(t) for t in df["tract"]})
+    if band is None:
+        if "band" not in df.columns:
+            raise ValueError(f"{path} has no 'band' column; pass --band")
+        bands = sorted(set(df["band"]))
+        if len(bands) != 1:
+            raise ValueError(f"{path} has multiple bands {bands}; pass --band")
+        band = bands[0]
+    return tracts, band
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "tracts_csv", type=Path, help="CSV with a 'tract' column (from select_visible_tracts.py)"
+    )
+    parser.add_argument(
+        "--band",
+        default=None,
+        help="Band to query (default: the single value in the CSV's 'band' column)",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Output CSV of visit IDs (default: output/visits_<band>_<input stem>.csv)",
+    )
+    args = parser.parse_args()
+
+    tracts, band = read_tract_list(args.tracts_csv, args.band)
+    print(f"{len(tracts)} tracts in band {band} from {args.tracts_csv}")
+    if args.output is None:
+        args.output = OUTPUT_DIR / f"visits_{band}_{args.tracts_csv.stem}.csv"
 
     endpoints = get_endpoints()
-    i_visits = get_visits_for_tracts([1448, 1449, 1450, 1321, 1322, 1323],"i", endpoints)
-    z_visits = get_visits_for_tracts([1448, 1449, 1450, 1321, 1322, 1323],"z", endpoints)
+    visits = get_visits_for_tracts(tracts, band, endpoints)
+
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({"visit": visits}).to_csv(args.output, index=False)
+    print(f"Wrote {args.output} ({len(visits)} visits)")
 
 
-#    tracts = [7023, 7024, 7259]
-#    for band in ["u","g","r","i","z","y"]:
-#        print(band, get_visits_for_tracts(tracts, band, endpoints))
-
-    print(i_visits)
-    print(z_visits)
+if __name__ == "__main__":
+    main()
