@@ -48,10 +48,18 @@ python scripts/generate_nexp_dashboard_data.py     # -> web/nexp_dashboard_data.
 ./deploy/sync_nexp.sh   			   # nexp dashboard
 ```
 
-If you want a csv file for analysis:
+Generate a csv file for analysis:
 
 ```bash
 python scripts/healpix_to_tracts.py                # -> output/tract_nexp_fractions.csv
+```
+
+Select tracts to coadd:
+
+Generate the expected input visit list:
+
+```bash
+python scripts/get_visits_for_tracts.py
 ```
 
 ## Curate DECam templates

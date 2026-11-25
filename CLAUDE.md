@@ -48,6 +48,41 @@ The three generators share **`scripts/common.py`**, which holds the skymap
 loading, pixel→tract assignment, tract-corner extraction, and per-tract
 fraction logic.
 
+### 3. Visible-tract selection (`scripts/select_visible_tracts.py`)
+
+Downstream of `healpix_to_tracts.py`: reads `output/tract_nexp_fractions.csv`,
+keeps tracts in one band with `frac_ge_<N>` at or above a minimum, then uses
+astropy to compute how long each tract *center* is above a minimum altitude
+(default 30°) between evening and morning 12° twilight on a given night, and
+writes the tracts visible for at least the requested hours to a CSV.
+
+```bash
+# band, frac_ge_N threshold N, min frac, night start date (day_obs), min hours
+python scripts/select_visible_tracts.py i 3 0.5 2026-12-16 2.0
+# -> output/selected_tracts_i_2026-12-16.csv
+```
+
+The date is the local date on which the night *starts*. Visibility is
+integrated on a 5-minute grid (`--step-minutes`); `--min-altitude` changes the
+altitude cut. Tract centers come from `skymap[tract].getCtrCoord()`.
+
+### 4. Visits for selected tracts (`scripts/get_visits_for_tracts.py`)
+
+Takes the tract CSV from `select_visible_tracts.py` (any CSV with a `tract`
+column works) and writes the good visits overlapping those tracts. Visits come
+from the `main` Butler, are filtered by the decasu consdb selection in
+`config/decasu_incremental_templates_config.yaml`, and have known bad visits
+removed via `common.get_bad_visit_lists`. Needs an RSP token (see
+`common.get_endpoints`).
+
+```bash
+python scripts/get_visits_for_tracts.py output/selected_tracts_i_2026-12-16.csv
+# -> output/visits_i_selected_tracts_i_2026-12-16.csv  (single 'visit' column)
+```
+
+The band defaults to the single value in the CSV's `band` column; pass
+`--band` if the CSV has none or several.
+
 ### Upstream input: the `.hsp` nexp maps
 
 The `.hsp` files in `output_incremental_test/` are **decasu** outputs, not
