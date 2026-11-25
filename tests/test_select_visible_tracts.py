@@ -63,3 +63,54 @@ def test_visible_hours_near_sun_is_zero_and_anti_sun_is_full():
     assert hours[1] == 0.0
     assert hours[0] > 0.8 * night_length
     assert hours[0] <= night_length
+
+
+def _write_deployed_json(path, records):
+    import json
+
+    path.write_text(json.dumps({"generated_at": "now", "summary": {}, "records": records}))
+
+
+def test_load_deployed_fractions_returns_fraction_per_tract_in_band(tmp_path):
+    path = tmp_path / "deployed.json"
+    _write_deployed_json(
+        path,
+        [
+            {"band": "g", "tract": 1, "n_patches": 100, "n_patches_total": 100, "corners": []},
+            {"band": "g", "tract": 2, "n_patches": 25, "n_patches_total": 100, "corners": []},
+            {"band": "r", "tract": 3, "n_patches": 100, "n_patches_total": 100, "corners": []},
+        ],
+    )
+
+    fractions = svt.load_deployed_fractions(path, band="g")
+
+    assert fractions == {1: pytest.approx(1.0), 2: pytest.approx(0.25)}
+
+
+def test_load_deployed_fractions_requires_patch_counts(tmp_path):
+    path = tmp_path / "deployed.json"
+    _write_deployed_json(path, [{"band": "g", "tract": 1, "corners": []}])
+
+    with pytest.raises(ValueError, match="n_patches"):
+        svt.load_deployed_fractions(path, band="g")
+
+
+def test_exclude_deployed_drops_fully_covered_tracts():
+    df = _make_df()
+    selected = svt.select_tracts(df, band="g", threshold=1, min_frac=0.0)
+    deployed = {1: 1.0, 2: 0.3}
+
+    out = svt.exclude_deployed(selected, deployed, max_frac=1.0)
+
+    assert out["tract"].tolist() == [2, 3]
+    assert out["deployed_frac"].tolist() == pytest.approx([0.3, 0.0])
+
+
+def test_exclude_deployed_honours_max_frac():
+    df = _make_df()
+    selected = svt.select_tracts(df, band="g", threshold=1, min_frac=0.0)
+    deployed = {1: 1.0, 2: 0.3}
+
+    out = svt.exclude_deployed(selected, deployed, max_frac=0.3)
+
+    assert out["tract"].tolist() == [3]

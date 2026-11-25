@@ -8,7 +8,7 @@ HEALPix fractional coverage maps.
 import argparse
 import json
 import math
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -77,19 +77,41 @@ def query_template_patches(repo="embargo", collection="LSSTCam/templates"):
     return patches_by_band
 
 
-def get_tract_corners(skymap, tracts_by_band):
-    """Compute RA, Dec corners for each tract that has any patch coverage."""
+def get_tract_corners(skymap, patches_by_band):
+    """Compute RA, Dec corners and patch counts for each tract with coverage.
+
+    Parameters
+    ----------
+    skymap : `lsst.skymap.BaseSkyMap`
+        Skymap used to look up tract geometry.
+    patches_by_band : `dict` [`str`, `list` [`dict`]]
+        Per-band lists of ``{"tract": int, "patch": int}`` data IDs, as
+        returned by `query_template_patches`.
+
+    Returns
+    -------
+    records : `list` [`dict`]
+        One record per (band, tract) with ``band``, ``tract``, ``corners``,
+        ``n_patches`` (patches with a deployed template) and
+        ``n_patches_total`` (patches in the tract), sorted by tract within
+        each band.
+    """
     records = []
-    for band, tract_ids in tracts_by_band.items():
-        for tract_id in sorted(tract_ids):
+    for band, patches in patches_by_band.items():
+        counts = Counter(p["tract"] for p in patches)
+        for tract_id in sorted(counts):
+            tract_info = skymap[tract_id]
+            nx, ny = tract_info.getNumPatches()
             corners = [
                 {"ra": ra, "dec": dec}
-                for ra, dec in common.tract_corners(skymap[tract_id], ndigits=None)
+                for ra, dec in common.tract_corners(tract_info, ndigits=None)
             ]
             records.append({
                 "band": band,
                 "tract": tract_id,
                 "corners": corners,
+                "n_patches": counts[tract_id],
+                "n_patches_total": nx*ny,
             })
     return records
 
@@ -276,7 +298,7 @@ def main():
     skymap = common.load_skymap("embargo")
 
     print("Computing tract corners...")
-    records = get_tract_corners(skymap, tracts_by_band)
+    records = get_tract_corners(skymap, patches_by_band)
 
     summary = build_summary(skymap, patches_by_band, tracts_by_band)
 

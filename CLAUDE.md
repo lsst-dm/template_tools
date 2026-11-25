@@ -16,8 +16,10 @@ the Butler.
 - **`scripts/query_embargo_templates.py`** — Queries the `embargo` Butler for
   `template_coadd` datasets in `LSSTCam/templates`. It produces three kinds of
   output in one run:
-  1. `web/deployed_template_data.json` — tract corner coords + per-band summary
-     stats (patch/tract counts, area in deg² via spherical excess).
+  1. `web/deployed_template_data.json` — per-(band, tract) records with corner
+     coords, `n_patches` (patches with a deployed template) and
+     `n_patches_total` (patches in the tract), plus per-band summary stats
+     (patch/tract counts, area in deg² via spherical excess).
   2. `output/template_coverage_healpix_{band}_nside{N}.fits` — per-band
      fractional HEALPix coverage maps (NESTED), computed by sub-sampling patch
      polygons at 4× the target NSIDE.
@@ -51,10 +53,12 @@ fraction logic.
 ### 3. Visible-tract selection (`scripts/select_visible_tracts.py`)
 
 Downstream of `healpix_to_tracts.py`: reads `output/tract_nexp_fractions.csv`,
-keeps tracts in one band with `frac_ge_<N>` at or above a minimum, then uses
-astropy to compute how long each tract *center* is above a minimum altitude
-(default 30°) between evening and morning 12° twilight on a given night, and
-writes the tracts visible for at least the requested hours to a CSV.
+keeps tracts in one band with `frac_ge_<N>` at or above a minimum, drops
+tracts that already have a full set of deployed LSSTCam templates in that
+band (from `web/deployed_template_data.json`), then uses astropy to compute
+how long each tract *center* is above a minimum altitude (default 30°)
+between evening and morning 12° twilight on a given night, and writes the
+tracts visible for at least the requested hours to a CSV.
 
 ```bash
 # band, frac_ge_N threshold N, min frac, night start date (day_obs), min hours
@@ -65,6 +69,14 @@ python scripts/select_visible_tracts.py i 3 0.5 2026-12-16 2.0
 The date is the local date on which the night *starts*. Visibility is
 integrated on a 5-minute grid (`--step-minutes`); `--min-altitude` changes the
 altitude cut. Tract centers come from `skymap[tract].getCtrCoord()`.
+
+The deployed-template cut uses `n_patches/n_patches_total` from the JSON
+records: tracts at or above `--max-deployed-frac` (default 1.0, i.e. fully
+covered) are excluded, `--no-exclude-deployed` disables the cut, and
+`--deployed-templates` points at a different JSON. The output CSV carries the
+`deployed_frac` for each tract that survives. JSON files written before the
+patch counts were added must be regenerated with
+`query_embargo_templates.py` or the script raises an error.
 
 ### 4. Visits for selected tracts (`scripts/get_visits_for_tracts.py`)
 
