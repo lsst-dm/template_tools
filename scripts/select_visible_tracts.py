@@ -6,13 +6,16 @@ keeps rows in the requested band whose ``frac_ge_<N>`` value is at least the
 requested minimum, then computes how many hours each tract center is above a
 minimum altitude between evening and morning 12-degree (nautical) twilight on
 the requested night. Tracts visible for at least ``--min-hours`` are written to
-a CSV.
+a CSV. Tracts whose deployed templates (``web/deployed_template_data.json``,
+from ``query_embargo_templates.py``) already cover the whole tract in that
+band are excluded unless ``--no-exclude-deployed`` is given.
 
 The date is interpreted as the local date on which the night *starts*
 (the ``day_obs`` convention): ``2026-12-16`` means the night of Dec 16/17.
 """
 
 import argparse
+import json
 from pathlib import Path
 
 import numpy as np
@@ -26,6 +29,7 @@ import common
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = REPO_ROOT / "output"
+WEB_DIR = REPO_ROOT / "web"
 
 # Sun altitude defining the end/start of 12-degree (nautical) twilight.
 TWILIGHT_SUN_ALTITUDE = -12.0
@@ -63,6 +67,63 @@ def select_tracts(df, band, threshold, min_frac):
         raise ValueError(f"Column {column} not in table; available: {available}")
     mask = (df["band"] == band) & (df[column] >= min_frac)
     return df.loc[mask].sort_values("tract").reset_index(drop=True)
+
+
+def load_deployed_fractions(path, band):
+    """Return the fraction of each tract's patches with a deployed template.
+
+    Parameters
+    ----------
+    path : `pathlib.Path`
+        ``deployed_template_data.json`` written by
+        ``query_embargo_templates.py``.
+    band : `str`
+        Band to read.
+
+    Returns
+    -------
+    fractions : `dict` [`int`, `float`]
+        Mapping from tract to ``n_patches/n_patches_total`` for tracts in
+        ``band`` that have at least one deployed template patch.
+    """
+    with open(path) as f:
+        records = json.load(f)["records"]
+    fractions = {}
+    for record in records:
+        if record["band"] != band:
+            continue
+        if "n_patches" not in record or "n_patches_total" not in record:
+            raise ValueError(
+                f"{path} records lack n_patches/n_patches_total; "
+                "regenerate it with query_embargo_templates.py"
+            )
+        fractions[int(record["tract"])] = record["n_patches"]/record["n_patches_total"]
+    return fractions
+
+
+def exclude_deployed(df, deployed_fractions, max_frac=1.0):
+    """Drop tracts whose deployed-template patch fraction is >= ``max_frac``.
+
+    Parameters
+    ----------
+    df : `pandas.DataFrame`
+        Table with a ``tract`` column.
+    deployed_fractions : `dict` [`int`, `float`]
+        Output of `load_deployed_fractions`; tracts absent from it have no
+        deployed templates (fraction 0).
+    max_frac : `float`, optional
+        Tracts with deployed fraction at or above this are excluded. The
+        default of 1.0 removes only fully covered tracts.
+
+    Returns
+    -------
+    kept : `pandas.DataFrame`
+        Copy of the input with a ``deployed_frac`` column added and the
+        excluded tracts removed.
+    """
+    deployed_frac = df["tract"].map(deployed_fractions).fillna(0.0).astype(float)
+    kept = df.assign(deployed_frac=deployed_frac)
+    return kept.loc[deployed_frac < max_frac].reset_index(drop=True)
 
 
 def night_times(date, location, step_minutes=5.0, sun_altitude=TWILIGHT_SUN_ALTITUDE):
@@ -167,6 +228,26 @@ def main():
         help="Output CSV (default: output/selected_tracts_<band>_<date>.csv)",
     )
     parser.add_argument(
+        "--deployed-templates",
+        type=Path,
+        default=WEB_DIR / "deployed_template_data.json",
+        help="deployed_template_data.json from query_embargo_templates.py",
+    )
+    parser.add_argument(
+        "--max-deployed-frac",
+        type=float,
+        default=1.0,
+        help=(
+            "Exclude tracts whose fraction of patches with a deployed template is "
+            "at or above this (default 1.0: exclude fully covered tracts)"
+        ),
+    )
+    parser.add_argument(
+        "--no-exclude-deployed",
+        action="store_true",
+        help="Do not exclude tracts based on deployed templates",
+    )
+    parser.add_argument(
         "--min-altitude",
         type=float,
         default=30.0,
@@ -194,6 +275,16 @@ def main():
         f"{len(selected)} tracts in band {args.band} with "
         f"frac_ge_{args.threshold} >= {args.min_frac}"
     )
+    if not args.no_exclude_deployed:
+        deployed = load_deployed_fractions(args.deployed_templates, args.band)
+        n_before = len(selected)
+        selected = exclude_deployed(selected, deployed, args.max_deployed_frac)
+        print(
+            f"{n_before - len(selected)} tracts excluded with deployed template "
+            f"fraction >= {args.max_deployed_frac:g}; {len(selected)} remain"
+        )
+    else:
+        selected = selected.assign(deployed_frac=np.nan)
     if len(selected) == 0:
         print("Nothing to do.")
         return
@@ -218,7 +309,9 @@ def main():
         f"above {args.min_altitude:g} deg"
     )
 
-    columns = ["tract", "band", "ra", "dec", f"frac_ge_{args.threshold}", "visible_hours"]
+    columns = [
+        "tract", "band", "ra", "dec", f"frac_ge_{args.threshold}", "deployed_frac", "visible_hours"
+    ]
     args.output.parent.mkdir(parents=True, exist_ok=True)
     visible[columns].to_csv(args.output, index=False, float_format="%.4f")
     print(f"Wrote {args.output} ({len(visible)} rows)")
